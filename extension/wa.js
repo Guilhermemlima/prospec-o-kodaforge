@@ -72,8 +72,35 @@
     }, 200);
   }
 
+  // Abre a conversa sem recarregar a página, via wa-main.js (que roda no contexto do WhatsApp Web).
+  function openChat(phone, text, done) {
+    const id = Math.random().toString(36).slice(2);
+    const before = chatInfo().title;
+    let finished = false;
+    const finish = r => { if (finished) return; finished = true; window.removeEventListener('message', onMsg); done(r); };
+    const onMsg = e => {
+      if (e.source !== window || e.data?.src !== 'koda-main' || e.data.id !== id) return;
+      const r = e.data;
+      if (!r.ok) return finish({ ok: false, reason: r.reason });
+      // espera a conversa aparecer na tela; se a biblioteca não preencheu o texto, cola aqui
+      let tries = 0;
+      const wait = setInterval(() => {
+        const box = $('#main footer [contenteditable="true"]');
+        if (box && (chatInfo().title !== before || tries > 6)) {
+          clearInterval(wait);
+          if (r.typed && box.innerText.trim()) return finish({ ok: true });
+          insertText(text, res => finish({ ok: true, typed: res.ok }));
+        } else if (++tries > 25) { clearInterval(wait); finish({ ok: false, reason: 'timeout' }); }
+      }, 200);
+    };
+    window.addEventListener('message', onMsg);
+    window.postMessage({ src: 'koda-iso', type: 'open', id, phone, text }, '*');
+    setTimeout(() => finish({ ok: false, reason: 'timeout' }), 25000);
+  }
+
   chrome.runtime.onMessage.addListener((msg, _sender, reply) => {
     if (msg?.type === 'koda-get') { reply(snapshot()); return; }
     if (msg?.type === 'koda-insert') { insertText(msg.text, reply); return true; }
+    if (msg?.type === 'koda-open') { openChat(msg.phone, msg.text, reply); return true; }
   });
 })();

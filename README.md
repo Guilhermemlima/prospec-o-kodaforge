@@ -14,11 +14,15 @@ A etapa do funil, o histórico (qual modelo foi enviado) e a próxima ação sã
 ## Extensão do Chrome (CRM ao lado do WhatsApp Web)
 A pasta `extension/` é uma extensão que abre o CRM num painel lateral ao lado do WhatsApp Web.
 
+Usa a biblioteca aberta [WPPConnect wa-js](https://github.com/wppconnect-team/wa-js) (Apache-2.0) só para abrir conversas e preencher o texto, com estatísticas e serviços externos desligados (`extension/wa-config.js`). Nada é enviado automaticamente.
+
 **Instalar:** `chrome://extensions` → ligue o **Modo do desenvolvedor** → **Carregar sem compactação** → selecione a pasta `extension`. Fixe o ícone "K" na barra.
 
 **Usar:** abra o WhatsApp Web e clique no ícone "K".
 - Ao abrir uma conversa, o painel mostra o lead (pelo número ou pelo nome da empresa). Se não reconhecer, dá para vincular a conversa a um lead.
-- "Colocar na conversa" põe o modelo escolhido na caixa de mensagem; você confere e aperta Enter.
+- "Enviar" abre a conversa **dentro do WhatsApp Web já aberto, sem recarregar a página**, e põe o modelo na caixa de mensagem; você confere e aperta Enter.
+- **Fila de envio** (início do painel): follow-ups do dia e depois leads novos por prioridade. Enviou, o próximo já aparece.
+- Números sem WhatsApp são detectados e marcados (ligue para pedir o WhatsApp do responsável).
 - O painel avisa quando o lead já te mandou mensagem e lista conversas não lidas de leads, com botão para marcar "Respondeu".
 - "CRM ↗" abre o CRM completo numa aba, com os mesmos dados do painel.
 
