@@ -10,9 +10,18 @@
   });
 
   window.addEventListener('message', async e => {
-    if (e.source !== window || e.data?.src !== 'koda-iso' || e.data.type !== 'open') return;
-    const { id, phone, text } = e.data;
+    if (e.source !== window || e.data?.src !== 'koda-iso') return;
+    const { id, phone, text, type } = e.data;
     const reply = r => window.postMessage({ src: 'koda-main', id, ...r }, '*');
+    if (type === 'check') {
+      // só confere se o número tem WhatsApp (não abre conversa)
+      try {
+        if (!(await ready())) return reply({ ok: false, reason: 'not-ready' });
+        const found = await WPP.contact.queryWidExists(phone + '@c.us');
+        return reply({ ok: true, exists: !!found, biz: !!found?.biz });
+      } catch (err) { return reply({ ok: false, reason: String(err?.message || err) }); }
+    }
+    if (type !== 'open') return;
     try {
       if (!(await ready())) return reply({ ok: false, reason: 'not-ready' });
       const found = await WPP.contact.queryWidExists(phone + '@c.us');

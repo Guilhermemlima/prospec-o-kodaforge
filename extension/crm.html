@@ -240,13 +240,14 @@ body.panel .x#close{font-size:14px;width:auto;padding:0 10px}
 
 <main>
   <section id="v-lista">
+    <div class="seg" id="canalSeg" style="margin-bottom:10px;width:max-content;max-width:100%"></div>
     <div class="filters">
       <input type="search" id="q" placeholder="Buscar empresa, categoria, bairro, telefone, contato…">
       <select id="fStatus"><option value="">Todos os status</option></select>
       <select id="fPrio"><option value="">Toda prioridade</option><option>Alta</option><option>Média</option><option>Baixa</option></select>
       <select id="fNicho"><option value="">Todos os nichos</option></select>
       <select id="fPres"><option value="">Toda presença</option><option value="A">A · Sem site</option><option value="B">B · Só rede social</option><option value="C">C · Site improvisado</option></select>
-      <select id="fCanal"><option value="">Todo canal</option><option value="WhatsApp">WhatsApp</option><option value="Ligar (fixo)">Fixo</option><option value="Sem telefone">Sem telefone</option></select>
+      <select id="fCanal" class="hidden"><option value="">Todos</option><option value="wa">WhatsApp</option><option value="ligar">Ligar</option></select>
       <label class="chk"><input type="checkbox" id="fDue"> Só ações vencidas</label>
       <span class="count" id="count"></span>
     </div>

@@ -98,10 +98,23 @@
     setTimeout(() => finish({ ok: false, reason: 'timeout' }), 25000);
   }
 
+  // Confere se um número tem WhatsApp (via wa-main.js), sem abrir conversa.
+  function checkNumber(phone, done) {
+    const id = Math.random().toString(36).slice(2);
+    const onMsg = e => {
+      if (e.source !== window || e.data?.src !== 'koda-main' || e.data.id !== id) return;
+      window.removeEventListener('message', onMsg); clearTimeout(t); done(e.data);
+    };
+    const t = setTimeout(() => { window.removeEventListener('message', onMsg); done({ ok: false, reason: 'timeout' }); }, 20000);
+    window.addEventListener('message', onMsg);
+    window.postMessage({ src: 'koda-iso', type: 'check', id, phone }, '*');
+  }
+
   chrome.runtime.onMessage.addListener((msg, _sender, reply) => {
     if (msg?.type === 'koda-ping') { reply({ ok: true }); return; }
     if (msg?.type === 'koda-get') { reply(snapshot()); return; }
     if (msg?.type === 'koda-insert') { insertText(msg.text, reply); return true; }
     if (msg?.type === 'koda-open') { openChat(msg.phone, msg.text, reply); return true; }
+    if (msg?.type === 'koda-check') { checkNumber(msg.phone, reply); return true; }
   });
 })();

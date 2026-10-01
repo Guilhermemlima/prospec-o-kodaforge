@@ -317,7 +317,26 @@ const today = () => ymd(new Date());
 function addDays(n){ const d=new Date(); d.setDate(d.getDate()+n); return ymd(d); }
 function br(ds){ if(!ds) return ''; const [y,m,d]=ds.slice(0,10).split('-'); return d+'/'+m+(y!==String(new Date().getFullYear())?'/'+y:''); }
 function nowStr(){ const d=new Date(); return ymd(d)+' '+String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0'); }
-function phone(l){ let d=(l.tel||'').replace(/\D/g,''); if(!d) return ''; if(!d.startsWith('55')) d='55'+d; return d; }
+// número usado no WhatsApp: o WhatsApp conseguido na ligação (s.wpp) ou o telefone da planilha
+function phone(l){ let d=(l.s.wpp||l.tel||'').replace(/\D/g,''); if(!d) return ''; if(!d.startsWith('55')) d='55'+d; return d; }
+// celular = 9 dígitos começando com 9 depois do DDD; fixo = 8 dígitos
+function telTipo(l){ const d=(l.tel||'').replace(/\D/g,'').replace(/^55/,''), loc=d.slice(2); return !d ? 'sem' : loc.length===9 && loc[0]==='9' ? 'cel' : 'fixo'; }
+// 'sim' = dá pra chamar no WhatsApp · 'fixo' = fixo ainda não verificado · 'nao' = confirmado sem WhatsApp · 'sem' = sem telefone
+function waStatus(l){
+  if(l.s.wpp) return 'sim';
+  if(l.s.semWA || l.s.wa===false) return 'nao';
+  if(l.s.wa===true) return 'sim';
+  const t=telTipo(l); return t==='cel' ? 'sim' : t;
+}
+const canWA = l => waStatus(l)==='sim';
+function canalBadge(l){
+  const w=waStatus(l);
+  if(w==='sim') return `<span class="pill s-fechado">📱 WhatsApp${l.s.wpp?' (da ligação)':telTipo(l)==='fixo'?' ✓ fixo':''}</span>`;
+  if(w==='fixo') return '<span class="pill">☎️ Fixo · ligar</span>';
+  if(w==='nao') return '<span class="pill s-perdido">📵 Sem WhatsApp · ligar</span>';
+  return '<span class="pill">Sem telefone</span>';
+}
+function fmtTel(d){ d=String(d||'').replace(/\D/g,'').replace(/^55/,''); return d.length>=10 ? `(${d.slice(0,2)}) ${d.slice(2,-4)}-${d.slice(-4)}` : d; }
 const presKey = l => (l.pres||'')[0];
 function presShort(l){ const p=l.pres||''; if(p[0]==='A') return 'Sem site'; if(p[0]==='C') return 'Site improvisado'; const m=p.match(/\((.*)\)/); return m?m[1]:'Só rede social'; }
 function isDue(l){ const p=l.s.prox; return p && p<=today() && !['fechado','perdido','sem_retorno'].includes(l.s.status); }
@@ -432,6 +451,7 @@ function renderStats(){
 /* ---------- lista ---------- */
 let sortK='pts', sortDir=-1, current=null, visible=[];
 $('#fStatus').innerHTML += STAGES.map(s=>`<option value="${s.k}">${s.l}</option>`).join('');
+try{ const c=sessionStorage.getItem(KEY+'-canal'); $('#fCanal').value = c===null ? 'wa' : c; }catch(e){ $('#fCanal').value='wa'; }
 $('#fNicho').innerHTML += [...new Set(leads.map(l=>l.nicho))].sort().map(n=>`<option>${esc(n)}</option>`).join('');
 ['q','fStatus','fPrio','fNicho','fPres','fCanal','fDue'].forEach(id=>$('#'+id).addEventListener('input',renderList));
 document.querySelectorAll('th[data-s]').forEach(th=>th.onclick=()=>{ const k=th.dataset.s; sortDir = sortK===k ? -sortDir : (k==='emp'||k==='bairro'?1:-1); sortK=k; renderList(); });
@@ -441,11 +461,18 @@ function filtered(){
   const r = leads.filter(l =>
     (!qn || norm([l.emp,l.cat,l.bairro,l.tel,l.nicho,l.s.contato].join(' ')).includes(qn)) &&
     (!fs || l.s.status===fs) && (!fp || l.prio===fp) && (!fn || l.nicho===fn) && (!fr || presKey(l)===fr) &&
-    (!fc || (l.canal||'').startsWith(fc)) && (!fd || isDue(l)));
+    (!fc || (fc==='wa' ? canWA(l) : !canWA(l))) && (!fd || isDue(l)));
   const val = l => sortK==='status' ? STAGES.findIndex(s=>s.k===l.s.status) : sortK==='prox' ? (l.s.prox||'9999') : sortK==='pts' ? l.pts*100000+(l.aval||0) : l[sortK];
   return r.sort((a,b)=>{ const x=val(a), y=val(b); return (x>y?1:x<y?-1:0)*sortDir; });
 }
+function renderCanalSeg(){
+  const fc=$('#fCanal').value, nWA=leads.filter(canWA).length;
+  $('#canalSeg').innerHTML = [['wa',`📱 WhatsApp (${nWA})`],['ligar',`☎️ Ligar (${leads.length-nWA})`],['',`Todos (${leads.length})`]]
+    .map(([k,t])=>`<button data-canal="${k}" class="${k===fc?'on':''}">${t}</button>`).join('');
+  document.querySelectorAll('[data-canal]').forEach(b=>b.onclick=()=>{ $('#fCanal').value=b.dataset.canal; try{ sessionStorage.setItem(KEY+'-canal',b.dataset.canal); }catch(e){} renderList(); });
+}
 function renderList(){
+  renderCanalSeg();
   visible = filtered();
   $('#count').textContent = visible.length+' de '+leads.length;
   $('#rows').innerHTML = visible.map(l=>`<tr data-id="${l.id}" class="${current===l.id?'sel':''}">
@@ -454,7 +481,7 @@ function renderList(){
     <td>${esc(l.bairro||'')}</td>
     <td>${esc(presKey(l))} · ${esc(presShort(l))}</td>
     <td class="num">${l.nota?String(l.nota).replace('.',','):'–'} <small style="color:var(--muted)">(${l.aval??0})</small></td>
-    <td>${l.canal==='WhatsApp'?'WhatsApp':l.canal?.startsWith('Ligar')?'Fixo':'—'}</td>
+    <td>${canalBadge(l)}</td>
     <td><span class="pill s-${l.s.status}">${SL[l.s.status]}</span></td>
     <td class="${isDue(l)?'due':''}">${br(l.s.prox)}</td></tr>`).join('') || `<tr><td colspan="8" class="empty">Nenhum lead com esses filtros.</td></tr>`;
 }
@@ -540,8 +567,8 @@ function drawerHTML(l){
       <div><label>1º contato · mensagens enviadas</label><input value="${esc(br(l.s.data1)||'—')} · ${envios.length}" disabled></div>
     </div>
 
-    <div class="sendbox">
-      <h3>💬 Mensagem</h3>
+    ${!canWA(l) && !forceMsg.has(l.id) ? callBoxHTML(l) : `<div class="sendbox">
+      <h3>💬 Mensagem${!canWA(l)?' <button class="btn xs" id="backCall" style="margin-left:auto">☎️ Voltar para ligação</button>':''}</h3>
       <div class="cats">${CATS.map(c=>`<button data-cat="${c.k}" class="${c.k===selCat?'on':''}" title="${c.k===nextCat?'Próximo passo para este lead':''}">${c.e} ${c.l}${c.k===nextCat?'<span class="nx">●</span>':''}</button>`).join('')}</div>
       <div class="chips">${tplsOf(selCat).map(x=>`<button data-tpl="${x.id}" class="${x.id===selTpl?'on':''} ${tplActive(x)?'':'off'}" title="${tplActive(x)?(x.nicho?'Para '+esc(x.nicho):''):'Fora da validade ('+tplPeriod(x)+')'}">${esc(x.nome)}${x.nicho&&x.nicho===l.nicho?' ★':''}</button>`).join('') || '<span class="hint" style="margin:0">Nenhum modelo nesta etapa.</span>'}
         <button data-newtpl="1" title="Criar modelo nesta etapa">+ Novo</button></div>
@@ -549,7 +576,7 @@ function drawerHTML(l){
       ${varInputs(l,t)}
       ${!tplActive(t)?`<div class="warn">Este modelo vale só em ${tplPeriod(t)}. Confira os valores e prazos antes de enviar.</div>`:''}
       ${missing.length?`<div class="warn">Sem valor para ${missing.map(k=>'<b>'+esc(k)+'</b>').join(', ')}: ${missing.length>1?'esses trechos foram retirados':'esse trecho foi retirado'} da mensagem. Preencha acima para incluir.</div>`:''}
-      ${fixo&&!inChat?`<div class="warn">Número fixo. Muitos comércios usam WhatsApp Business no fixo, então vale tentar. Se não abrir, ligue e peça o WhatsApp do responsável (roteiro em Ajustes).</div>`:''}
+      ${!canWA(l)&&!inChat?`<div class="warn">Número fixo sem WhatsApp confirmado. Se a conversa não abrir, volte para a ligação.</div>`:''}
       <textarea class="inp" id="msg">${esc(fillFor(t,l))}</textarea>
       <div class="row" style="margin-top:8px">
         <button class="btn pri" id="send" ${ph||inChat?'':'disabled'}>${inChat?'Colocar na conversa':'Enviar no WhatsApp'}</button>
@@ -559,7 +586,7 @@ function drawerHTML(l){
       </div>
       <div class="hint">${st.cfg.modo==='app'?'Abre o WhatsApp Desktop com o texto pronto':inChat?'O texto vai para a caixa de mensagem da conversa aberta':EXT||document.documentElement.dataset.kodaBridge?'Abre a conversa na aba do WhatsApp Web com o texto pronto':'Abre o WhatsApp Web com o texto pronto'}: confira e aperte Enter.
         ${after!==l.s.status?` Ao enviar, o lead vai para <b>${SL[after]}</b> e a próxima ação fica para daqui a ${CL[t.etapa].days} dias.`:' Ao enviar, o envio fica registrado no histórico.'}</div>` : ''}
-    </div>
+    </div>`}
 
     <div class="field"><label class="lb">Observações</label>
       <textarea class="inp" id="obs" style="min-height:80px" placeholder="O que foi conversado, melhor horário, próximo passo…">${esc(l.s.obs||'')}</textarea></div>
@@ -580,7 +607,104 @@ function drawerHTML(l){
       h.tipo==='envio' && h.tplNome ? `Enviou <b>${esc(h.tplNome)}</b> <span class="pill tag s-${esc(h.cat)}">${esc(CL[h.cat]?.l||h.cat)}</span>${h.editada?' <small style="color:var(--muted)">(texto editado)</small>':''}${h.para?` → ${esc(SL[h.para])}`:''}` : esc(h.txt)}</li>`).join('')}</ul>` : '<p class="hint">Nenhuma interação ainda.</p>'}
   </div>`;
 }
+const forceMsg = new Set(); // leads sem WhatsApp em que você pediu para tentar mesmo assim
+const canAskExt = () => EXT || !!document.documentElement.dataset.kodaBridge;
+function callBoxHTML(l){
+  const w=waStatus(l), tent=l.s.hist.filter(h=>h.tipo==='ligacao').length, ph=(l.tel||'').replace(/\D/g,'');
+  return `<div class="sendbox" style="background:var(--amber-soft)">
+    <h3>☎️ ${w==='sem'?'Sem telefone':'Ligar para pegar o WhatsApp'}</h3>
+    ${w==='sem' ? `<p class="hint" style="margin-top:0">Esta empresa não tem telefone no Google. Procure o contato no Maps ou no Instagram (direct).</p>` : `
+    <p class="hint" style="margin-top:0">${w==='nao'?'Este número <b>não tem WhatsApp</b>.':'Este número é <b>fixo</b>.'} Ligue, fale com o responsável e peça o WhatsApp para mandar o exemplo.${tent?` · ${tent} tentativa(s) de ligação`:''}</p>
+    <div class="row" style="margin-bottom:10px">
+      <a class="btn pri" href="tel:+55${ph.replace(/^55/,'')}">📞 Ligar ${esc(fmtTel(l.tel))}</a>
+      <button class="btn sm" id="copyTel2">Copiar número</button>
+      ${w==='fixo' && canAskExt() ? '<button class="btn sm" id="chkWA" title="Confere na sua conta do WhatsApp Web se este fixo tem WhatsApp Business">🔎 Ver se tem WhatsApp</button>':''}
+    </div>
+    <details ${tent?'':'open'}><summary style="cursor:pointer;font-weight:600;font-size:13px">Roteiro da ligação</summary>
+      <p class="hint" style="white-space:pre-wrap;font-size:13px;color:var(--text)">${esc(fill(DATA.scripts['LIGAÇÃO (número fixo)'].replace(/\[EMPRESA\]/g,'{{empresa}}'),l))}</p></details>
+    <h4 style="margin-top:12px">Como foi a ligação?</h4>
+    <div id="callGot" class="hidden" style="background:var(--panel);border-radius:10px;padding:10px;margin-bottom:8px">
+      <div class="grid2" style="margin-bottom:8px">
+        <div><label>WhatsApp do responsável</label><input id="newWpp" inputmode="tel" placeholder="(42) 9 9999-9999"></div>
+        <div><label>Nome do responsável</label><input id="newNome" value="${esc(l.s.contato||'')}" placeholder="ex.: Maria"></div>
+      </div>
+      <button class="btn acc sm" id="saveWpp">Salvar e ir para a mensagem</button>
+    </div>
+    <div class="row">
+      <button class="btn sm" id="callOk">✅ Consegui o WhatsApp</button>
+      <button class="btn sm" id="callNo">📵 Não atendeu</button>
+      <button class="btn sm" id="callNoWA">☎️ Atendeu, mas não tem WhatsApp</button>
+      <button class="btn sm danger" id="callLost">Sem interesse</button>
+    </div>`}
+    <div class="hint">${w==='sem'?'':'Prefere tentar a mensagem assim mesmo? '}<a href="#" id="tryMsg">Abrir mensagem do WhatsApp</a></div>
+  </div>`;
+}
+function fill(txt,l){ return renderTpl(txt, varValues(l)); }
+function bindCallBox(l){
+  const snapAnd = (fn,msg) => { const snap=snapshot(l); fn(); save(); refresh(); openLead(l.id,true); toast(msg,'Desfazer',()=>restore(l,snap)); };
+  if($('#tryMsg')) $('#tryMsg').onclick=e=>{ e.preventDefault(); forceMsg.add(l.id); openLead(l.id,true); };
+  if($('#backCall')) $('#backCall').onclick=()=>{ forceMsg.delete(l.id); openLead(l.id,true); };
+  if(!$('#callOk')) return;
+  $('#copyTel2').onclick=()=>{ copyText(l.tel); toast('Número copiado'); };
+  $('#callOk').onclick=()=>{ $('#callGot').classList.remove('hidden'); $('#newWpp').focus(); };
+  $('#saveWpp').onclick=()=>{
+    let d=$('#newWpp').value.replace(/\D/g,''); if(d.startsWith('55')) d=d.slice(2);
+    if(d.length===8||d.length===9) d=(l.tel||'').replace(/\D/g,'').replace(/^55/,'').slice(0,2)+d; // sem DDD: usa o da empresa
+    if(d.length<10||d.length>11){ alert('Confira o número: coloque o DDD e o número, ex.: 42 99999-9999.'); return; }
+    const nome=$('#newNome').value.trim();
+    snapAnd(()=>{ l.s.wpp='55'+d; if(nome) l.s.contato=nome; delete l.s.semWA; log(l,`Ligação: conseguiu o WhatsApp ${fmtTel(d)}${nome?' ('+nome+')':''}`,{tipo:'ligacao'}); }, 'WhatsApp salvo. Agora é só mandar a mensagem.');
+  };
+  $('#callNo').onclick=()=>snapAnd(()=>{ log(l,'Ligação: não atendeu',{tipo:'ligacao'}); l.s.prox=addDays(1); }, 'Registrado. Tentar de novo amanhã.');
+  $('#callNoWA').onclick=()=>snapAnd(()=>{ log(l,'Ligação: atendeu, mas não tem WhatsApp',{tipo:'ligacao'}); l.s.wa=false; }, 'Registrado. Anote nas observações o que foi combinado.');
+  $('#callLost').onclick=()=>{ log(l,'Ligação: sem interesse',{tipo:'ligacao'}); setStatus(l,'perdido'); };
+  if($('#chkWA')) $('#chkWA').onclick=async()=>{
+    $('#chkWA').disabled=true; $('#chkWA').textContent='Verificando…';
+    const r=await checkWA(l);
+    if(r==='erro') toast('Não consegui verificar. Deixe o WhatsApp Web aberto e conectado numa aba e tente de novo.');
+    else toast(r==='sim' ? `${l.emp}: tem WhatsApp! Já pode mandar mensagem.` : `${l.emp}: este fixo não tem WhatsApp. Ligue.`);
+    openLead(l.id,true); refresh();
+  };
+}
+// confere na conta do WhatsApp Web se o número tem WhatsApp; guarda o resultado no lead
+async function checkWA(l){
+  const r = await extAsk({type:'koda-wa-check', phone:phone(l)});
+  if(!r?.ok) return 'erro';
+  l.s.wa = !!r.exists; l.s.waChk = today(); if(r.exists) delete l.s.semWA;
+  log(l, r.exists ? 'Verificado: o número tem WhatsApp'+(r.biz?' Business':'') : 'Verificado: o número não tem WhatsApp');
+  save(); return r.exists ? 'sim' : 'nao';
+}
+function extAsk(msg){
+  if(EXT) return chrome.runtime.sendMessage(msg).catch(()=>({ok:false}));
+  if(document.documentElement.dataset.kodaBridge) return new Promise(res=>{
+    const id=Math.random().toString(36).slice(2);
+    const on=e=>{ if(e.source!==window || e.data?.src!=='koda-bridge' || e.data.id!==id) return; window.removeEventListener('message',on); res(e.data); };
+    window.addEventListener('message',on);
+    window.postMessage({src:'koda-page', id, msg},'*');
+    setTimeout(()=>{ window.removeEventListener('message',on); res({ok:false, reason:'timeout'}); },30000);
+  });
+  return Promise.resolve({ok:false, reason:'no-ext'});
+}
+// verifica em lote os fixos ainda não verificados (devagar: uma consulta a cada 2 s)
+let checking=false;
+async function checkAllFixos(btn){
+  if(checking){ checking=false; return; }
+  const list=leads.filter(l=>waStatus(l)==='fixo' && !['fechado','perdido'].includes(l.s.status));
+  if(!list.length){ toast('Todos os fixos já foram verificados.'); return; }
+  if(!confirm(`Verificar ${list.length} números fixos na sua conta do WhatsApp Web? Leva cerca de ${Math.ceil(list.length*2.2/60)} minuto(s). Deixe a aba do WhatsApp Web aberta.`)) return;
+  checking=true; let sim=0, nao=0, i=0;
+  for(const l of list){
+    if(!checking) break;
+    i++; if(btn) btn.textContent=`Verificando ${i}/${list.length}… (clique para parar)`;
+    const r=await checkWA(l);
+    if(r==='erro'){ toast('Parei: não consegui falar com o WhatsApp Web. Deixe-o aberto e conectado numa aba.'); break; }
+    r==='sim'?sim++:nao++;
+    if(i%5===0) refresh();
+  }
+  checking=false; refresh(); if(!$('#v-config').classList.contains('hidden')) renderCfg();
+  toast(`Verificação: ${sim} fixo(s) com WhatsApp, ${nao} sem.`);
+}
 function bindDrawer(l){
+  bindCallBox(l);
   const i = visible.findIndex(x=>x.id===l.id);
   $('#close').onclick=closeLead;
   $('#prev').onclick=()=>{ if(i>0) openLead(visible[i-1].id); };
@@ -592,7 +716,7 @@ function bindDrawer(l){
   $('#copyTel').onclick=()=>{ copyText(l.tel); toast('Número copiado'); };
   document.querySelectorAll('[data-cat]').forEach(b=>b.onclick=()=>{ selCat=b.dataset.cat; selTpl=defaultTpl(l,selCat); openLead(l.id,true); });
   document.querySelectorAll('[data-tpl]').forEach(b=>b.onclick=()=>{ selTpl=b.dataset.tpl; openLead(l.id,true); });
-  $('[data-newtpl]').onclick=()=>openEditor(null, selCat, l);
+  if($('[data-newtpl]')) $('[data-newtpl]').onclick=()=>openEditor(null, selCat, l);
   document.querySelectorAll('[data-var]').forEach(inp=>inp.onchange=()=>{
     const k=inp.dataset.var, v=inp.value.trim();
     if(k==='contato'){ l.s.contato=v; } else if(v) l.s.v[k]=v; else delete l.s.v[k];
@@ -634,24 +758,17 @@ function openWA(l,text){
   if(st.cfg.modo==='app'){
     if(!ph){ copyText(text); toast('Lead sem telefone. Texto copiado.'); return {ok:false, reason:'no-phone'}; }
     // abre o app do WhatsApp no Windows com a conversa e o texto prontos (nenhuma aba é aberta)
-    const a=document.createElement('a'); a.href=`whatsapp://send?phone=${ph}&text=${t}`; document.body.appendChild(a); a.click(); a.remove();
+    const url=`whatsapp://send?phone=${ph}&text=${t}`;
+    if(canAskExt()){ extAsk({type:'koda-protocol', url}); return {ok:true}; }
+    const a=document.createElement('a'); a.href=url; document.body.appendChild(a); a.click(); a.remove();
     return {ok:true};
   }
   if(EXT) return extOpenWA(l,text);
   // site com a extensão instalada: a extensão reaproveita a aba do WhatsApp Web
-  if(document.documentElement.dataset.kodaBridge && st.cfg.modo==='web') return bridgeOpen(ph,text);
+  if(document.documentElement.dataset.kodaBridge && st.cfg.modo==='web') return extAsk({type:'koda-wa-open', phone:ph, text, focus:true}).then(r=>r?.reason==='no-whatsapp'?r:{ok:true});
   if(st.cfg.modo==='wame') window.open(`https://wa.me/${ph}?text=${t}`,'kodaforge_wa');
   else window.open(`https://web.whatsapp.com/send?phone=${ph}&text=${t}`,'kodaforge_wa');
   return {ok:true};
-}
-function bridgeOpen(ph,text){
-  return new Promise(res=>{
-    const id=Math.random().toString(36).slice(2);
-    const on=e=>{ if(e.source!==window || e.data?.src!=='koda-bridge' || e.data.id!==id) return; window.removeEventListener('message',on); res(e.data); };
-    window.addEventListener('message',on);
-    window.postMessage({src:'koda-page', type:'open', id, phone:ph, text},'*');
-    setTimeout(()=>{ window.removeEventListener('message',on); res({ok:false, reason:'timeout'}); },30000);
-  });
 }
 function registerSend(l,t,text,advance){
   const snap=snapshot(l), from=l.s.status, to=statusAfterSend(from,t.etapa);
@@ -852,7 +969,8 @@ const currentOrNextCampaign = () => activeCampaign() || [...st.campanhas].filter
 function renderHoje(){
   const due = leads.filter(isDue).sort((a,b)=>(a.s.prox>b.s.prox?1:-1));
   const next = leads.filter(l=>l.s.status==='a_contatar' && phone(l)).sort((a,b)=>b.pts-a.pts || (b.aval||0)-(a.aval||0));
-  const nextWA = next.filter(l=>l.canal==='WhatsApp');
+  const nextWA = next.filter(canWA);
+  const ligar = leads.filter(l=>l.s.status==='a_contatar' && ['fixo','nao'].includes(waStatus(l)) && (!l.s.prox || l.s.prox<=today())).sort((a,b)=>b.pts-a.pts || (b.aval||0)-(a.aval||0));
   const n=sentToday(), meta=st.cfg.meta;
   const item = l => `<div class="li" data-id="${l.id}"><div><b>${esc(l.emp)}</b><small>${esc(l.cat)} · ${SL[l.s.status]}${l.s.prox?' · próximo: '+CL[NEXT_CAT[l.s.status]].l:''}</small></div>${l.s.prox?`<span class="${isDue(l)?'due':''}">${br(l.s.prox)}</span>`:`<span class="pill p-${esc(l.prio)}">${esc(l.prio)}</span>`}</div>`;
   $('#today').innerHTML = `
@@ -863,12 +981,15 @@ function renderHoje(){
       <p class="hint">Mande uma por vez e personalize quando der. Melhor horário: terça a quinta, 9h–11h ou 14h–16h.</p>
       <button class="btn pri" id="startSeq" ${nextWA.length?'':'disabled'}>Começar pelos próximos com WhatsApp →</button></div>
     <div class="box"><h3>Ações para hoje</h3><p class="sub">${due.length ? due.length+' lead(s) esperando o próximo passo' : 'Nada vencido. 👌'}</p>${due.map(item).join('')}</div>
-    <div class="box"><h3>Próximos a contatar</h3><p class="sub">Maior prioridade primeiro · ${next.length} com telefone</p>${next.slice(0,12).map(item).join('')}</div>`;
+    <div class="box"><h3>📱 Próximos no WhatsApp</h3><p class="sub">Maior prioridade primeiro · ${nextWA.length} com WhatsApp</p>${nextWA.slice(0,10).map(item).join('')}</div>
+    <div class="box"><h3>☎️ Ligações para fazer</h3><p class="sub">${ligar.length?`${ligar.length} fixos: ligue e peça o WhatsApp do responsável`:'Nenhuma ligação pendente.'}</p>${ligar.slice(0,10).map(item).join('')}
+      ${ligar.length?`<button class="btn sm" id="goLigar" style="margin-top:8px">Ver lista de ligações →</button>`:''}</div>`;
   document.querySelectorAll('#today .li').forEach(e=>e.onclick=()=>openLead(+e.dataset.id));
   bindChecklist(renderHoje);
+  if($('#goLigar')) $('#goLigar').onclick=()=>{ ['q','fPrio','fNicho','fPres'].forEach(id=>$('#'+id).value=''); $('#fDue').checked=false; $('#fStatus').value='a_contatar'; $('#fCanal').value='ligar'; show('lista'); renderList(); };
   const b=$('#startSeq'); if(b) b.onclick=()=>{
     ['q','fStatus','fPrio','fNicho','fPres','fDue'].forEach(id=>{ const e=$('#'+id); if(e.type==='checkbox') e.checked=false; else e.value=''; });
-    $('#fStatus').value='a_contatar'; $('#fCanal').value='WhatsApp'; sortK='pts'; sortDir=-1;
+    $('#fStatus').value='a_contatar'; $('#fCanal').value='wa'; sortK='pts'; sortDir=-1;
     show('lista'); renderList(); if(visible[0]) openLead(visible[0].id);
   };
 }
@@ -908,6 +1029,10 @@ function renderCfg(){
         <div><label>Limite de envios por dia</label><input type="number" id="meta" min="1" value="${c.meta}"></div>
         <div><label>Depois de enviar uma mensagem de prospecção</label><select id="avancar"><option value="1" ${c.avancar?'selected':''}>Abrir o próximo lead da lista</option><option value="0" ${!c.avancar?'selected':''}>Ficar no mesmo lead</option></select></div>
       </div></div>
+    <div class="box"><h3>Fixos: quais têm WhatsApp?</h3>
+      <p class="sub">${(()=>{ const f=leads.filter(l=>telTipo(l)==='fixo'), v=f.filter(l=>l.s.wa!==undefined||l.s.semWA), s=f.filter(l=>l.s.wa===true).length; return `${f.length} fixos · ${v.length} verificados (${s} com WhatsApp, ${v.length-s} sem) · ${f.length-v.length} a verificar.`; })()}
+      Alguns comércios usam WhatsApp Business no fixo. A verificação usa a sua conta do WhatsApp Web (precisa estar aberta numa aba) e consulta um número a cada 2 segundos, sem abrir conversas nem mandar nada.</p>
+      ${canAskExt() ? '<button class="btn sm" id="chkAll">🔎 Verificar os fixos</button>' : '<p class="hint">Disponível com a extensão do Chrome instalada.</p>'}</div>
     <div class="box"><h3>Sequência automática</h3>
       <p class="hint" style="font-size:13px;line-height:1.7">Ao enviar um modelo, o lead vai para a etapa do modelo e a próxima ação é agendada:
       1ª mensagem → follow-up 1 em <b>2 dias</b> → follow-up 2 em mais <b>4 dias</b> → última mensagem em mais <b>7 dias</b> → depois de <b>7 dias</b> sem resposta, vai para <b>Sem retorno</b> (pode ser reativado).
@@ -921,6 +1046,7 @@ function renderCfg(){
         <button class="btn sm danger" id="reset">Apagar progresso dos leads</button>
       </div></div>`;
   document.querySelectorAll('[data-cfg]').forEach(i=>i.onchange=()=>{ st.cfg[i.dataset.cfg]=i.value.trim(); save(); toast('Salvo'); });
+  if($('#chkAll')) $('#chkAll').onclick=e=>checkAllFixos(e.currentTarget);
   document.querySelectorAll('[data-camp]').forEach(inp=>inp.onchange=()=>{
     const [i,k]=inp.dataset.camp.split(':'), c=st.campanhas[+i];
     c[k] = k.startsWith('meta') ? parseMoney(inp.value) : inp.value.trim();
@@ -942,9 +1068,9 @@ function download(name,content,type){ const a=document.createElement('a'); a.hre
 function exportCSV(){
   const cols=[['#','id'],['Prioridade','prio'],['Pontos','pts'],['Empresa','emp'],['Nicho','nicho'],['Categoria','cat'],['Presença digital','pres'],['Telefone','tel'],['Canal','canal'],['Bairro','bairro'],['Nota','nota'],['Avaliações','aval'],['Google Maps','maps']];
   const q=v=>'"'+String(v??'').replace(/"/g,'""')+'"';
-  const head=[...cols.map(c=>c[0]),'Contato','Etapa','1º contato','Próxima ação','Mensagens enviadas','Último modelo enviado','Observações'];
+  const head=[...cols.map(c=>c[0]),'WhatsApp','Contato','Etapa','1º contato','Próxima ação','Mensagens enviadas','Último modelo enviado','Observações'];
   const lines=leads.map(l=>{ const env=l.s.hist.filter(h=>h.tipo==='envio'), u=env.at(-1);
-    return [...cols.map(c=>l[c[1]]), l.s.contato, SL[l.s.status], br(l.s.data1), br(l.s.prox), env.length, u?`${u.t} · ${u.tplNome||u.txt}`:'', l.s.obs].map(q).join(';'); });
+    return [...cols.map(c=>l[c[1]]), {sim:'Sim'+(l.s.wpp?' ('+fmtTel(l.s.wpp)+')':''), fixo:'Fixo (não verificado)', nao:'Não', sem:'Sem telefone'}[waStatus(l)], l.s.contato, SL[l.s.status], br(l.s.data1), br(l.s.prox), env.length, u?`${u.t} · ${u.tplNome||u.txt}`:'', l.s.obs].map(q).join(';'); });
   download(`crm-kodaforge-${today()}.csv`, '﻿'+[head.map(q).join(';'),...lines].join('\r\n'), 'text/csv');
 }
 
@@ -1178,9 +1304,9 @@ window.addEventListener('storage',e=>{ if(e.key===KEY){ st=load(); refresh(); } 
 // follow-ups vencidos primeiro, depois leads novos com WhatsApp, por prioridade
 let queue=null, qi=0;
 function buildQueue(){
-  const ok = l => phone(l) && !l.s.semWA;
+  const ok = l => canWA(l);
   const due = leads.filter(l=>isDue(l) && ok(l) && SEQ.includes(l.s.status)).sort((a,b)=>(a.s.prox>b.s.prox?1:-1));
-  const novos = leads.filter(l=>l.s.status==='a_contatar' && ok(l) && l.canal==='WhatsApp').sort((a,b)=>b.pts-a.pts || (b.aval||0)-(a.aval||0));
+  const novos = leads.filter(l=>l.s.status==='a_contatar' && ok(l)).sort((a,b)=>b.pts-a.pts || (b.aval||0)-(a.aval||0));
   return [...due, ...novos].map(l=>l.id);
 }
 function startQueue(){ queue=buildQueue(); qi=0; if(!queue.length){ queue=null; toast('Nenhum lead na fila.'); return; } openLead(queue[0]); }
@@ -1199,6 +1325,7 @@ const byPhone8 = new Map(leads.filter(l=>phone(l)).map(l=>[phone(l).slice(-8), l
 function matchChat(title, extra){
   if(!title) return null;
   const link = (st.waLinks||{})[title];
+  for(const l of leads) if(l.s.wpp && (title+' '+(extra||'')).replace(/\D/g,'').includes(l.s.wpp.slice(-8))) return l.id;
   if(link && byId[link]) return link;
   for(const txt of [title, extra||'']){
     for(const m of txt.match(/\+?\d[\d\s().-]{8,}\d/g)||[]){

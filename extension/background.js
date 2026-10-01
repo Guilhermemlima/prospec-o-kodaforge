@@ -50,8 +50,36 @@ async function openInWhatsApp({ phone, text, focus: doFocus = true, insertOnly =
   return { ok: true, via: 'reload' };
 }
 
-chrome.runtime.onMessage.addListener((msg, _sender, reply) => {
-  if (msg?.type !== 'koda-wa-open') return;
-  openInWhatsApp(msg).then(reply, err => reply({ ok: false, reason: String(err?.message || err) }));
+// Confere se o número tem WhatsApp usando a aba do WhatsApp Web (precisa estar aberta e conectada).
+let lastCheck = 0;
+async function checkNumber({ phone }) {
+  if (!/^\d{10,13}$/.test(String(phone))) return { ok: false, reason: 'bad-phone' };
+  // no máximo uma consulta a cada 2 s, para não sobrecarregar a conta do WhatsApp
+  const wait = lastCheck + 2000 - Date.now();
+  lastCheck = Math.max(Date.now(), lastCheck + 2000);
+  if (wait > 0) await new Promise(r => setTimeout(r, wait));
+  const tab = await waTab();
+  if (!tab) return { ok: false, reason: 'no-tab' };
+  if (!(await ensureScripts(tab.id))) return { ok: false, reason: 'no-scripts' };
+  try { return await chrome.tabs.sendMessage(tab.id, { type: 'koda-check', phone }); }
+  catch (e) { return { ok: false, reason: 'no-scripts' }; }
+}
+
+// Abre o WhatsApp Desktop (link whatsapp://). Páginas da extensão não conseguem abrir apps sozinhas,
+// então o link é aberto na aba atual: o Chrome mostra "Abrir WhatsApp?" e a página continua onde estava.
+async function openProtocol({ url }, sender) {
+  if (!/^whatsapp:\/\/send\?phone=\d+(&text=[^\s]*)?$/.test(String(url))) return { ok: false, reason: 'bad-url' };
+  let tabId = sender.tab?.id;
+  if (!tabId) { const [t] = await chrome.tabs.query({ active: true, lastFocusedWindow: true }); tabId = t?.id; }
+  try { if (tabId) { await chrome.tabs.update(tabId, { url }); return { ok: true }; } } catch (e) {}
+  await chrome.tabs.create({ url });
+  return { ok: true };
+}
+
+const HANDLERS = { 'koda-wa-open': openInWhatsApp, 'koda-wa-check': checkNumber, 'koda-protocol': openProtocol };
+chrome.runtime.onMessage.addListener((msg, sender, reply) => {
+  const h = HANDLERS[msg?.type];
+  if (!h) return;
+  h(msg, sender).then(reply, err => reply({ ok: false, reason: String(err?.message || err) }));
   return true;
 });
