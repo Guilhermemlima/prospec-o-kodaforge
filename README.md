@@ -10,8 +10,21 @@ A etapa do funil, o histórico (qual modelo foi enviado) e a próxima ação sã
 - **Variáveis:** `{{empresa}} {{contato}} {{cidade}} {{segmento}} {{site}} {{nome_vendedor}} {{valor_site}} {{valor_manutencao}} {{prazo}} {{data}} {{horario}} {{data_horario_1}} {{data_horario_2}} {{mensagem_personalizada}}`. Campos vazios são retirados da mensagem sem quebrar o texto.
 - O progresso fica salvo no navegador (localStorage). Faça backup em "Ajustes".
 
+## Extensão do Chrome (CRM ao lado do WhatsApp Web)
+A pasta `extension/` é uma extensão que abre o CRM num painel lateral ao lado do WhatsApp Web.
+
+**Instalar:** `chrome://extensions` → ligue o **Modo do desenvolvedor** → **Carregar sem compactação** → selecione a pasta `extension`. Fixe o ícone "K" na barra.
+
+**Usar:** abra o WhatsApp Web e clique no ícone "K".
+- Ao abrir uma conversa, o painel mostra o lead (pelo número ou pelo nome da empresa). Se não reconhecer, dá para vincular a conversa a um lead.
+- "Colocar na conversa" põe o modelo escolhido na caixa de mensagem; você confere e aperta Enter.
+- O painel avisa quando o lead já te mandou mensagem e lista conversas não lidas de leads, com botão para marcar "Respondeu".
+- "CRM ↗" abre o CRM completo numa aba, com os mesmos dados do painel.
+
+Os dados da extensão ficam separados do site da Vercel. Para levar o progresso: no site, **Ajustes → Baixar backup**; na extensão, **CRM ↗ → Ajustes → Restaurar backup**.
+
 ## Editar o código
-O código fica em `src/crm.template.html` e os leads em `src/leads.json`. Depois de editar, gere o `index.html`:
+O código fica em `src/crm.template.html` e os leads em `src/leads.json`. Depois de editar, gere o `index.html` e os arquivos da extensão:
 
 ```bash
 python build.py

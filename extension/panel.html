@@ -1,0 +1,251 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CRM Koda Forge</title>
+<style>
+:root{
+  --bg:#f6f7f9;--panel:#fff;--panel2:#f1f3f6;--line:#e3e6eb;--text:#1b1f24;--muted:#667080;
+  --accent:#1f7a5a;--accent-ink:#fff;--accent-soft:#e3f2ec;--wa:#1faa59;
+  --red:#c2413a;--red-soft:#fbe9e7;--amber:#a86a00;--amber-soft:#fdf1d8;--blue:#2f5fb3;--blue-soft:#e6eefb;
+  --purple:#7a46b8;--purple-soft:#f1e9fb;
+  --shadow:0 8px 30px rgba(20,30,40,.12);
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#111418;--panel:#181c21;--panel2:#20252c;--line:#2b313a;--text:#e7eaee;--muted:#98a2b0;
+  --accent:#3fb58a;--accent-ink:#0c1a14;--accent-soft:#17362b;--wa:#2bc46b;
+  --red:#ef7a70;--red-soft:#3a1f1d;--amber:#e6b04a;--amber-soft:#3a2d12;--blue:#7ea6ef;--blue-soft:#1c2940;
+  --purple:#b892ec;--purple-soft:#2c2140;
+  --shadow:0 8px 30px rgba(0,0,0,.5);
+}}
+:root[data-theme="dark"]{
+  --bg:#111418;--panel:#181c21;--panel2:#20252c;--line:#2b313a;--text:#e7eaee;--muted:#98a2b0;
+  --accent:#3fb58a;--accent-ink:#0c1a14;--accent-soft:#17362b;--wa:#2bc46b;
+  --red:#ef7a70;--red-soft:#3a1f1d;--amber:#e6b04a;--amber-soft:#3a2d12;--blue:#7ea6ef;--blue-soft:#1c2940;
+  --purple:#b892ec;--purple-soft:#2c2140;
+  --shadow:0 8px 30px rgba(0,0,0,.5);
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:14px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+button,input,select,textarea{font:inherit;color:inherit}
+header{position:sticky;top:0;z-index:5;background:var(--panel);border-bottom:1px solid var(--line)}
+.top{display:flex;align-items:center;gap:16px;padding:12px 20px;flex-wrap:wrap}
+.brand{font-weight:700;font-size:16px;letter-spacing:-.01em}
+.brand small{font-weight:500;color:var(--muted);margin-left:6px}
+nav{display:flex;gap:4px;margin-left:auto;flex-wrap:wrap}
+nav button{border:0;background:transparent;padding:7px 12px;border-radius:8px;cursor:pointer;color:var(--muted);font-weight:600}
+nav button.on{background:var(--accent-soft);color:var(--accent)}
+nav button .n{display:inline-block;min-width:18px;padding:0 5px;margin-left:5px;border-radius:9px;background:var(--red);color:#fff;font-size:11px;line-height:18px}
+.stats{display:flex;gap:10px;padding:0 20px 12px;overflow-x:auto}
+.stat{flex:1 0 110px;background:var(--panel2);border-radius:10px;padding:8px 12px}
+.stat b{display:block;font-size:20px;font-variant-numeric:tabular-nums}
+.stat span{color:var(--muted);font-size:12px}
+main{padding:16px 20px 60px;max-width:1500px;margin:0 auto}
+.filters{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;align-items:center}
+.filters input,.filters select{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:7px 10px}
+.filters input[type=search]{flex:1 1 220px;min-width:180px}
+.chk{display:flex;align-items:center;gap:6px;color:var(--muted);font-size:13px}
+.count{color:var(--muted);font-size:13px;margin-left:auto}
+.tablewrap{background:var(--panel);border:1px solid var(--line);border-radius:12px;overflow:auto}
+table{border-collapse:collapse;width:100%;min-width:900px}
+th,td{padding:9px 12px;text-align:left;border-bottom:1px solid var(--line);white-space:nowrap}
+th{font-size:12px;color:var(--muted);font-weight:600;position:sticky;top:0;background:var(--panel);cursor:pointer;user-select:none}
+tbody tr{cursor:pointer}
+tbody tr:hover{background:var(--panel2)}
+tbody tr.sel{background:var(--accent-soft)}
+td.emp{font-weight:600;white-space:normal;min-width:200px}
+td.emp small{display:block;font-weight:400;color:var(--muted)}
+.num{font-variant-numeric:tabular-nums}
+.pill{display:inline-block;padding:2px 8px;border-radius:999px;font-size:12px;font-weight:600;background:var(--panel2);color:var(--muted)}
+.p-Alta{background:var(--red-soft);color:var(--red)}
+.p-Média{background:var(--amber-soft);color:var(--amber)}
+.p-Baixa{background:var(--panel2);color:var(--muted)}
+.s-a_contatar,.s-sem_retorno{background:var(--panel2);color:var(--muted)}
+.s-enviada,.s-fu1,.s-fu2,.s-ultima{background:var(--blue-soft);color:var(--blue)}
+.s-respondeu{background:var(--amber-soft);color:var(--amber)}
+.s-negociando{background:var(--purple-soft);color:var(--purple)}
+.s-fechado{background:var(--accent-soft);color:var(--accent)}
+.s-perdido{background:var(--red-soft);color:var(--red)}
+.due{color:var(--red);font-weight:600}
+.btn{border:1px solid var(--line);background:var(--panel);padding:8px 12px;border-radius:9px;cursor:pointer;font-weight:600;display:inline-flex;align-items:center;gap:6px;text-decoration:none;color:var(--text)}
+.btn:hover{background:var(--panel2)}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.btn.pri{background:var(--wa);border-color:var(--wa);color:#fff}
+.btn.pri:hover{filter:brightness(1.07)}
+.btn.acc{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.btn.sm{padding:5px 9px;font-size:13px}
+.btn.xs{padding:3px 8px;font-size:12px;border-radius:7px}
+.btn.danger{color:var(--red)}
+/* gaveta */
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.25);opacity:0;pointer-events:none;transition:.15s;z-index:9}
+.overlay.on{opacity:1;pointer-events:auto}
+aside{position:fixed;top:0;right:0;bottom:0;width:min(620px,100vw);background:var(--panel);box-shadow:var(--shadow);transform:translateX(105%);transition:transform .2s;z-index:10;display:flex;flex-direction:column}
+aside.on{transform:none}
+.dh{padding:16px 20px;border-bottom:1px solid var(--line);display:flex;gap:10px;align-items:flex-start}
+.dh h2{margin:0;font-size:18px;line-height:1.25}
+.dh .meta{color:var(--muted);font-size:13px;margin-top:3px}
+.x{border:0;background:var(--panel2);border-radius:8px;width:32px;height:32px;cursor:pointer;flex:none;font-size:18px}
+.navbtns{display:flex;gap:4px}
+.db{padding:16px 20px;overflow:auto;flex:1}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px 16px;margin-bottom:16px}
+label.lb,.grid2 label{display:block;font-size:12px;color:var(--muted);margin-bottom:3px;font-weight:600}
+.inp,.grid2 input,.grid2 select{width:100%;background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:7px 9px}
+textarea.inp{line-height:1.5;resize:vertical}
+.field{margin-bottom:14px}
+.info{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px}
+.info .pill{font-weight:500}
+.links{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px}
+.sendbox{background:var(--accent-soft);border-radius:12px;padding:14px;margin-bottom:16px}
+.sendbox h3{margin:0 0 10px;font-size:14px}
+.cats{display:flex;gap:4px;flex-wrap:wrap;margin-bottom:10px}
+.cats button{border:1px solid var(--line);background:var(--panel);border-radius:8px;padding:5px 9px;font-size:12px;font-weight:600;cursor:pointer;color:var(--muted)}
+.cats button.on{background:var(--text);color:var(--bg);border-color:var(--text)}
+.cats button .nx{color:var(--wa);margin-left:3px}
+.chips{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px}
+.chips button{border:1px solid var(--line);background:var(--panel);border-radius:999px;padding:5px 11px;font-size:13px;cursor:pointer}
+.chips button.on{border-color:var(--accent);background:var(--accent);color:var(--accent-ink);font-weight:600}
+.vars{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px;margin-bottom:10px}
+.vars label{font-size:11px;color:var(--muted);font-weight:600;display:block;margin-bottom:2px}
+.vars input{width:100%;background:var(--panel);border:1px solid var(--line);border-radius:7px;padding:5px 8px;font-size:13px}
+.vars .empty input{border-color:var(--amber)}
+#msg{min-height:200px;background:var(--panel)}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.warn{background:var(--amber-soft);color:var(--amber);padding:8px 10px;border-radius:8px;font-size:13px;margin:8px 0}
+.hint{color:var(--muted);font-size:12px;margin-top:6px}
+.hist{list-style:none;padding:0;margin:0;border-left:2px solid var(--line)}
+.hist li{padding:4px 0 8px 12px;position:relative;font-size:13px}
+.hist li:before{content:"";position:absolute;left:-5px;top:9px;width:8px;height:8px;border-radius:50%;background:var(--line)}
+.hist li.envio:before{background:var(--wa)}
+.hist time{color:var(--muted);font-size:12px;margin-right:6px}
+.hist .tag{font-size:11px;padding:1px 6px}
+h4{margin:18px 0 8px;font-size:13px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+/* funil */
+.kanban{display:flex;gap:12px;overflow-x:auto;padding-bottom:10px;align-items:flex-start}
+.col{flex:0 0 240px;background:var(--panel2);border-radius:12px;padding:10px;max-height:calc(100vh - 230px);display:flex;flex-direction:column}
+.col h3{margin:2px 4px 10px;font-size:13px;display:flex;justify-content:space-between;gap:6px}
+.col .cards{overflow:auto;display:flex;flex-direction:column;gap:6px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:9px;padding:8px 10px;cursor:pointer}
+.card:hover{border-color:var(--accent)}
+.card b{display:block;font-size:13px}
+.card small{color:var(--muted);font-size:12px}
+.card.drag{opacity:.4}
+.col.over{outline:2px dashed var(--accent)}
+/* hoje */
+.today{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:16px}
+.box{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 16px}
+.box h3{margin:0 0 4px;font-size:15px}
+.box p.sub{margin:0 0 10px;color:var(--muted);font-size:13px}
+.li{display:flex;align-items:center;gap:10px;padding:8px 0;border-top:1px solid var(--line);cursor:pointer}
+.li:hover b{color:var(--accent)}
+.li div{flex:1;min-width:0}
+.li b{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.li small{color:var(--muted)}
+.meter{height:8px;background:var(--panel2);border-radius:4px;overflow:hidden;margin:8px 0}
+.meter i{display:block;height:100%;background:var(--accent)}
+/* modelos */
+.cfg{display:grid;gap:16px;max-width:1100px}
+.tplcat{margin-top:16px}
+.tplcat h3{display:flex;align-items:center;gap:8px;font-size:15px;margin:0 0 8px}
+.tplgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:10px}
+.tcard{border:1px solid var(--line);border-radius:10px;padding:10px 12px;background:var(--panel);display:flex;flex-direction:column;gap:8px}
+.tcard b{font-size:14px}
+.tcard pre{margin:0;font:13px/1.45 inherit;white-space:pre-wrap;color:var(--muted);max-height:7.3em;overflow:hidden;-webkit-mask-image:linear-gradient(#000 70%,transparent)}
+.tcard .row{margin-top:auto}
+.v{color:var(--accent);font-weight:600}
+.radio{display:flex;gap:8px;flex-wrap:wrap}
+.radio label{border:1px solid var(--line);border-radius:9px;padding:8px 12px;cursor:pointer;display:flex;gap:8px;align-items:center}
+/* modal */
+.modal{position:fixed;inset:0;z-index:30;background:rgba(0,0,0,.4);display:flex;align-items:center;justify-content:center;padding:16px}
+.dialog{background:var(--panel);border-radius:14px;box-shadow:var(--shadow);width:min(860px,100%);max-height:calc(100vh - 32px);overflow:auto;padding:18px 20px}
+.dialog h3{margin:0 0 14px;font-size:17px}
+.ed{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.ed textarea{min-height:280px}
+.prev{background:var(--panel2);border-radius:10px;padding:10px 12px;white-space:pre-wrap;font-size:13px;line-height:1.5;min-height:280px}
+.vchips{display:flex;flex-wrap:wrap;gap:4px;margin:8px 0}
+.vchips button{border:1px solid var(--line);background:var(--panel2);border-radius:6px;padding:2px 7px;font-size:12px;cursor:pointer;font-family:ui-monospace,Consolas,monospace}
+.vchips button:hover{border-color:var(--accent);color:var(--accent)}
+.toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%) translateY(120px);background:var(--text);color:var(--bg);padding:10px 14px;border-radius:10px;display:flex;gap:12px;align-items:center;transition:.2s;z-index:40;box-shadow:var(--shadow);max-width:calc(100vw - 32px)}
+.toast.on{transform:translateX(-50%)}
+.toast button{background:transparent;border:1px solid currentColor;color:inherit;border-radius:7px;padding:3px 9px;cursor:pointer;font-weight:600;white-space:nowrap}
+/* painel lateral (extensão do Chrome) */
+body.panel{font-size:13px}
+body.panel header,body.panel main,body.panel .overlay,body.panel #prev,body.panel #next{display:none}
+body.panel aside{position:static;transform:none;width:100%;box-shadow:none;display:none}
+body.panel aside.on{display:flex}
+body.panel .db{overflow:visible;padding:14px}
+body.panel .dh{padding:12px 14px}
+body.panel .dh h2{font-size:16px}
+body.panel .x#close{font-size:14px;width:auto;padding:0 10px}
+.pbar{position:sticky;top:0;z-index:6;background:var(--panel);border-bottom:1px solid var(--line);padding:8px 12px;display:flex;gap:8px;align-items:center}
+.pbar .chat{flex:1;min-width:0;font-size:12px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pbar .chat b{color:var(--text)}
+#panelHome{padding:12px;display:grid;gap:12px}
+#panelHome .box{padding:12px 14px}
+.pfound{background:var(--amber-soft);color:var(--amber);border-radius:10px;padding:10px 12px;font-size:13px;margin-bottom:12px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.pfound b{flex:1 1 180px}
+.hidden{display:none!important}
+.empty{color:var(--muted);padding:20px;text-align:center}
+@media (max-width:700px){
+  .top{padding:10px 16px}.stats{padding:0 16px 10px}main{padding:12px 16px 60px}
+  nav{margin-left:0;width:100%}
+  .grid2,.ed{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+<header>
+  <div class="top">
+    <div class="brand">Koda Forge <small>CRM de prospecção · Guarapuava</small></div>
+    <nav id="tabs">
+      <button data-v="hoje">Hoje<span class="n hidden" id="dueN"></span></button>
+      <button data-v="lista" class="on">Leads</button>
+      <button data-v="funil">Funil</button>
+      <button data-v="modelos">Modelos de mensagem</button>
+      <button data-v="config">Ajustes</button>
+    </nav>
+  </div>
+  <div class="stats" id="stats"></div>
+</header>
+
+<main>
+  <section id="v-lista">
+    <div class="filters">
+      <input type="search" id="q" placeholder="Buscar empresa, categoria, bairro, telefone, contato…">
+      <select id="fStatus"><option value="">Todos os status</option></select>
+      <select id="fPrio"><option value="">Toda prioridade</option><option>Alta</option><option>Média</option><option>Baixa</option></select>
+      <select id="fNicho"><option value="">Todos os nichos</option></select>
+      <select id="fPres"><option value="">Toda presença</option><option value="A">A · Sem site</option><option value="B">B · Só rede social</option><option value="C">C · Site improvisado</option></select>
+      <select id="fCanal"><option value="">Todo canal</option><option value="WhatsApp">WhatsApp</option><option value="Ligar (fixo)">Fixo</option><option value="Sem telefone">Sem telefone</option></select>
+      <label class="chk"><input type="checkbox" id="fDue"> Só ações vencidas</label>
+      <span class="count" id="count"></span>
+    </div>
+    <div class="tablewrap">
+      <table>
+        <thead><tr>
+          <th data-s="pts">Prio.</th><th data-s="emp">Empresa</th><th data-s="bairro">Bairro</th><th data-s="pres">Presença</th>
+          <th data-s="nota">Nota</th><th data-s="canal">Canal</th><th data-s="status">Etapa</th><th data-s="prox">Próx. ação</th>
+        </tr></thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+  </section>
+  <section id="v-funil" class="hidden">
+    <p class="hint" style="margin-top:0">Arraste os cartões entre colunas para mudar a etapa. Clique para abrir.</p>
+    <div class="kanban" id="kanban"></div>
+  </section>
+  <section id="v-hoje" class="hidden"><div class="today" id="today"></div></section>
+  <section id="v-modelos" class="hidden"><div class="cfg" id="modelos"></div></section>
+  <section id="v-config" class="hidden"><div class="cfg" id="cfg"></div></section>
+</main>
+
+<div class="pbar hidden" id="panelBar"></div>
+<div id="panelHome" class="hidden"></div>
+<div class="overlay" id="ov"></div>
+<aside id="dr" aria-label="Detalhes do lead"></aside>
+<div id="modalRoot"></div>
+<div class="toast" id="toast"><span id="toastMsg"></span><button id="toastAct"></button></div>
+
+<script src="panel-mode.js"></script><script src="data.js"></script><script src="crm.js"></script>
+</body>
+</html>
