@@ -104,6 +104,9 @@ textarea.inp{line-height:1.5;resize:vertical}
 .cats button .nx{color:var(--wa);margin-left:3px}
 .chips{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px}
 .chips button{border:1px solid var(--line);background:var(--panel);border-radius:999px;padding:5px 11px;font-size:13px;cursor:pointer}
+.grid2.campgrid{grid-template-columns:2fr 1fr 1fr 1fr 1fr 1fr auto;align-items:end;gap:8px;margin-bottom:10px;padding-bottom:10px;border-bottom:1px solid var(--line)}
+@media (max-width:900px){.grid2.campgrid{grid-template-columns:1fr 1fr}}
+.chips button.off{opacity:.45;text-decoration:line-through}
 .chips button.on{border-color:var(--accent);background:var(--accent);color:var(--accent-ink);font-weight:600}
 .vars{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px;margin-bottom:10px}
 .vars label{font-size:11px;color:var(--muted);font-weight:600;display:block;margin-bottom:2px}

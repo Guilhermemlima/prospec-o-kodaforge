@@ -104,6 +104,9 @@ textarea.inp{line-height:1.5;resize:vertical}
 .cats button .nx{color:var(--wa);margin-left:3px}
 .chips{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px}
 .chips button{border:1px solid var(--line);background:var(--panel);border-radius:999px;padding:5px 11px;font-size:13px;cursor:pointer}
+.grid2.campgrid{grid-template-columns:2fr 1fr 1fr 1fr 1fr 1fr auto;align-items:end;gap:8px;margin-bottom:10px;padding-bottom:10px;border-bottom:1px solid var(--line)}
+@media (max-width:900px){.grid2.campgrid{grid-template-columns:1fr 1fr}}
+.chips button.off{opacity:.45;text-decoration:line-through}
 .chips button.on{border-color:var(--accent);background:var(--accent);color:var(--accent-ink);font-weight:600}
 .vars{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px;margin-bottom:10px}
 .vars label{font-size:11px;color:var(--muted);font-weight:600;display:block;margin-bottom:2px}
@@ -325,6 +328,11 @@ const VARS = [
   {k:'data_horario_1',   d:'1ª opção de horário (ex.: amanhã às 10h)', lead:true},
   {k:'data_horario_2',   d:'2ª opção de horário', lead:true},
   {k:'mensagem_personalizada', d:'1ª mensagem personalizada da planilha (nota, avaliações, nicho)'},
+  {k:'portfolio',          d:'Link do portfólio (Ajustes)'},
+  {k:'parceiros_fechados', d:'Vagas de Parceiro Koda já preenchidas (Ajustes)'},
+  {k:'campanha',           d:'Nome da campanha ativa hoje'},
+  {k:'fim_campanha',       d:'Último dia da campanha ativa (ex.: 30/11)'},
+  {k:'dias_restantes',     d:'Dias até o fim da campanha ativa'},
 ];
 const VK = Object.fromEntries(VARS.map(v=>[v.k,v]));
 const VAR_RE = /\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g;
@@ -461,6 +469,98 @@ Para começar, vou precisar de:
 O prazo de entrega é de {{prazo}}, contando a partir do recebimento dos materiais.
 Assim que eu receber, já começamos!`],
 ].map(([id,etapa,nome,conteudo])=>({id,etapa,nome,conteudo}));
+// Campanhas Outubro Koda e Black November 2026. inicio/fim = validade (fora dela o modelo não é sugerido);
+// nicho = sugerido primeiro para leads desse nicho; preco = sugerido quando o lead responde ao follow-up 2;
+// reat = sugerido para quem já conversou antes; pos = onde entra na lista ('start', 'end' ou antes de um id)
+const OUT = {inicio:'2026-10-01', fim:'2026-10-31'}, BLACK = {inicio:'2026-11-03', fim:'2026-11-30'};
+const CAMPAIGN_TEMPLATES = [
+  {id:'c_parceiro', etapa:'enviada', pos:'start', ...OUT, nome:'Parceiro Koda (comece por aqui)', conteudo:`Oi, {{contato}}, tudo bem? Aqui é o {{nome_vendedor}}, da Koda Forge, de {{cidade}}.
+Vou ser direto: estou escolhendo 3 negócios para serem Parceiros Koda. Eles ganham 30% de desconto no site, e em troca eu só peço um depoimento e permissão pra mostrar o site no portfólio.
+Pensei na {{empresa}}. Posso te mostrar como funciona?`},
+  {id:'c_outubro', etapa:'enviada', pos:'start', ...OUT, nome:'Outubro Koda (abertura geral)', conteudo:`Oi, {{contato}}! Vi que a {{empresa}} ainda não tem site, só o Instagram.
+Esse mês estou com o Outubro Koda: site profissional com 20% de desconto, ou sem pagar tudo de uma vez, numa mensalidade fixa com o primeiro mês grátis.
+Quer ver como ficaria o seu?`},
+  {id:'c_saude', etapa:'enviada', pos:'start', inicio:'2026-10-13', fim:'2026-10-25', nicho:'Saúde', nome:'Semana da Saúde (clínicas)', conteudo:`Oi, Dr(a). {{contato}}! Por causa do Dia do Médico e do Dentista, preparei uma condição só para clínicas de {{cidade}}: site profissional com página de agendamento direto no WhatsApp de bônus.
+Hoje seus pacientes te encontram mais por indicação ou pelo Google?`},
+  {id:'c_rosa', etapa:'enviada', pos:'start', ...OUT, nicho:'Beleza e estética', nome:'Outubro Rosa', conteudo:`Oi, {{contato}}! Vi que a {{empresa}} fala muito com o público feminino.
+Em outubro estou entregando sites com uma página de campanha Outubro Rosa inclusa, pronta pra divulgar sua ação do mês.
+Quer ver um modelo?`},
+  {id:'c_black', etapa:'enviada', pos:'start', ...BLACK, nome:'Black: abertura', conteudo:`{{contato}}, a Black da Koda Forge começou! 🖤
+Site Starter por R$ 1.097 no Pix, ou entrada de só R$ 247 + R$ 297/mês com tudo incluso.
+Quem fechar até 27/11 ainda ganha o Google Meu Negócio otimizado.
+Posso te mostrar como ficaria o site da {{empresa}}?`},
+  {id:'c_reativa', etapa:'enviada', pos:'start', ...BLACK, reat:true, nome:'Black: reativação (conversou em outubro)', conteudo:`Oi, {{contato}}! Lembra que a gente falou do site da {{empresa}}?
+Na Black ficou mais leve: dá pra começar com R$ 247 e o resto vira uma mensalidade fixa.
+Faz mais sentido assim?`},
+  {id:'c_fu_portfolio', etapa:'fu1', pos:'start', nome:'Portfólio (D+2)', conteudo:`{{contato}}, conseguiu ver? Te mando um site que fiz pra um negócio parecido com o seu: {{portfolio}}`},
+  {id:'c_fu_vagas', etapa:'fu2', pos:'start', ...OUT, nome:'Vagas de Parceiro Koda (D+5)', conteudo:`{{contato}}, das 3 vagas de Parceiro Koda, já foram {{parceiros_fechados}}. Seguro uma pra {{empresa}}?`},
+  {id:'c_fu_black', etapa:'fu2', pos:'start', ...BLACK, nome:'Black: faltam X dias (D+5)', conteudo:`{{contato}}, faltam {{dias_restantes}} dias pra acabar a Black. Seguro a condição pra {{empresa}}?`},
+  {id:'c_ult_out', etapa:'ultima', pos:'start', inicio:'2026-10-31', fim:'2026-10-31', nome:'Último dia do Outubro Koda', conteudo:`{{contato}}, hoje encerra a condição do Outubro Koda. Se fizer sentido, me responde "quero" que eu te mando o contrato.`},
+  {id:'c_ult_black', etapa:'ultima', pos:'start', inicio:'2026-11-30', fim:'2026-11-30', nome:'Último dia da Black', conteudo:`{{contato}}, hoje encerra a condição da Black. Se fizer sentido, me responde "quero" que eu te mando o contrato.`},
+  {id:'c_valores_out', etapa:'respondeu', pos:'r_preco', ...OUT, preco:true, nome:'Valores Outubro (Starter)', conteudo:`Tenho 3 formas, você escolhe a que cabe melhor:
+• Pix: site Starter (até 5 páginas) de R$ 1.497 por R$ 1.197 em outubro
+• Cartão: 12x de R$ 124,75, com 2 meses de manutenção grátis
+• Mensalidade: R$ 497 de entrada + R$ 297/mês, com hospedagem, backup e segurança inclusos, e o 1º mês grátis
+Em todas, você paga metade pra começar e o resto só com o site pronto, em 10 a 15 dias úteis.
+Qual faz mais sentido pra você?`},
+  {id:'c_valores_prof', etapa:'respondeu', pos:'r_preco', ...OUT, nome:'Valores Outubro (Profissional: mais páginas ou blog)', conteudo:`Tenho 3 formas, você escolhe a que cabe melhor:
+• Pix: site Profissional por R$ 2.397
+• Cartão: 12x de R$ 249,75
+• Mensalidade: R$ 997 de entrada + R$ 597/mês
+Em todas, você paga metade pra começar e o resto só com o site pronto, em 10 a 15 dias úteis.
+Qual faz mais sentido pra você?`},
+  {id:'c_valores_black', etapa:'respondeu', pos:'r_preco', ...BLACK, preco:true, nome:'Valores Black (Starter)', conteudo:`Na Black ficou assim:
+• Pix: site Starter por R$ 1.097
+• Mensalidade: entrada de só R$ 247 + R$ 297/mês, com tudo incluso
+Quem fechar até 27/11 ainda ganha o Google Meu Negócio otimizado.
+Em todas, você paga metade pra começar e o resto só com o site pronto, em 10 a 15 dias úteis.
+Qual faz mais sentido pra você?`},
+  {id:'c_obj_caro', etapa:'respondeu', pos:'end', nome:'Objeção: "Tá caro" (mensalidade)', conteudo:`Entendo. Por isso tem a mensalidade: R$ 297 por mês, menos de R$ 10 por dia, com tudo incluso.
+Se o site trouxer 1 cliente novo por mês, já se paga.
+Quanto vale um cliente novo pra você?`},
+  {id:'c_obj_insta', etapa:'respondeu', pos:'end', nome:'Objeção: "Já tenho Instagram" (Google)', conteudo:`O Instagram é ótimo pra quem já te segue. O site é pra quem pesquisa {{segmento}} no Google e ainda não te conhece.
+Hoje esse cliente vai pro concorrente que aparece lá.`},
+  {id:'c_obj_pensar', etapa:'respondeu', pos:'end', nome:'Objeção: "Vou pensar" (prazo da condição)', conteudo:`Claro! O que pesa mais: o valor ou a dúvida se vai trazer resultado? Lembrando que a condição vale até {{fim_campanha}}.`},
+  {id:'c_obj_mensal', etapa:'respondeu', pos:'end', ...OUT, nome:'Objeção: "Não quero mensalidade"', conteudo:`Sem problema: no Pix o Starter sai por R$ 1.197, ou 12x de R$ 124,75 no cartão.`},
+  {id:'c_obj_novos', etapa:'respondeu', pos:'end', nome:'Objeção: "Vocês são novos"', conteudo:`Justo. Por isso você paga metade pra começar e a outra metade só com o site pronto e aprovado.
+E te mostro os projetos que já fiz: {{portfolio}}`},
+  {id:'c_obj_sobrinho', etapa:'respondeu', pos:'end', nome:'Objeção: "Meu sobrinho faz"', conteudo:`Que bom! A diferença é contrato, prazo de entrega e alguém respondendo quando precisar mudar algo, todo mês.`},
+  {id:'c_fechamento', etapa:'negociando', pos:'p_fechamento', nome:'Fechamento (contrato)', conteudo:`Perfeito, {{contato}}! Pra garantir:
+1. Te mando o contrato pra assinar pelo celular
+2. Primeira parte no Pix
+3. Te passo a lista do que preciso (logo, fotos, serviços)
+Em 10 a 15 dias úteis o site está no ar. Posso mandar o contrato?`},
+];
+const V1_IDS = DEFAULT_TEMPLATES.map(t=>t.id);
+function insertTpl(list, c){
+  const t={...c}; delete t.pos;
+  const same = list.filter(x=>x.etapa===t.etapa);
+  let at;
+  if(c.pos==='start'){ const first = same.find(x=>V1_IDS.includes(x.id)); at = first ? list.indexOf(first) : -1; }
+  else if(c.pos!=='end'){ const ref = list.find(x=>x.id===c.pos); at = ref ? list.indexOf(ref) : -1; }
+  if(at===undefined || at<0){ const last = same.at(-1); at = last ? list.indexOf(last)+1 : list.length; }
+  list.splice(at, 0, t);
+}
+CAMPAIGN_TEMPLATES.forEach(c=>insertTpl(DEFAULT_TEMPLATES, c));
+const tplActive = (t, d=today()) => (!t.inicio || d>=t.inicio) && (!t.fim || d<=t.fim);
+const tplPeriod = t => t.inicio||t.fim ? (t.inicio===t.fim ? br(t.inicio) : `${t.inicio?br(t.inicio):'…'}–${t.fim?br(t.fim):'…'}`) : '';
+
+// metas e checklist do plano Outubro Koda + Black November 2026
+const DEFAULT_CAMPAIGNS = [
+  {id:'out26', nome:'Outubro Koda', inicio:'2026-10-01', fim:'2026-10-31', metaClientes:6, metaVendido:7085, metaFixa:1282},
+  {id:'black26', nome:'Black November', inicio:'2026-11-03', fim:'2026-11-30', metaClientes:7, metaVendido:5379, metaFixa:1779},
+];
+const DEFAULT_CHECKLIST = [
+  ['Montar contrato de assinatura com cláusula de fidelidade',''],
+  ['Configurar cobrança recorrente (Pix automático, boleto ou cartão)',''],
+  ['Separar os leads no CRM (sem site; saúde, beleza, alimentação, serviços)',''],
+  ['Começar pelo script do Parceiro Koda','2026-10-01'],
+  ['Semana da Saúde para clínicas','2026-10-13'],
+  ['Último dia do Outubro Koda; quem não fechou vai para a lista da Black','2026-10-31'],
+  ['Abrir a Black e reativar quem conversou em outubro','2026-11-03'],
+  ['Último dia do bônus (Google Meu Negócio otimizado)','2026-11-27'],
+  ['Encerrar a Black','2026-11-30'],
+].map(([txt,data],i)=>({id:'k'+(i+1), txt, data, feito:false}));
 
 /* ---------- estado ---------- */
 let st = load();
@@ -469,10 +569,15 @@ function load(){
   try{ s=JSON.parse(localStorage.getItem(KEY)); }catch(e){}
   s = s || {};
   s.leads = s.leads || {};
-  s.templates = Array.isArray(s.templates) ? s.templates : DEFAULT_TEMPLATES.map(t=>({...t}));
+  // modelos novos (ex.: campanhas) entram na lista de quem já usa o CRM, sem mexer nos editados
+  if(!Array.isArray(s.templates)) s.templates = DEFAULT_TEMPLATES.filter(t=>V1_IDS.includes(t.id)).map(t=>({...t}));
+  s.tplSeen ||= [...V1_IDS];
+  for(const c of CAMPAIGN_TEMPLATES) if(!s.tplSeen.includes(c.id)){ insertTpl(s.templates, c); s.tplSeen.push(c.id); }
+  s.campanhas ||= DEFAULT_CAMPAIGNS.map(c=>({...c}));
+  s.checklist ||= DEFAULT_CHECKLIST.map(c=>({...c}));
   delete s.tpl; // formato antigo
   s.fin = Object.assign({vendas:[], mensais:[], despesas:[]}, s.fin||{});
-  s.cfg = Object.assign({modo:'web', meta:25, avancar:true, nome_vendedor:'Guilherme', cidade:'Guarapuava', valor_site:'', valor_manutencao:'', prazo:''}, s.cfg||{});
+  s.cfg = Object.assign({modo:'web', meta:25, avancar:true, nome_vendedor:'Guilherme', cidade:'Guarapuava', valor_site:'', valor_manutencao:'', prazo:'', portfolio:'kodaforge.com.br', parceiros_fechados:''}, s.cfg||{});
   return s;
 }
 let saveWarned=false;
@@ -504,8 +609,10 @@ function fmtData(s){
   const [y,m,d]=s.split('-').map(Number); const dt=new Date(y,m-1,d);
   return dt.toLocaleDateString('pt-BR',{weekday:'long'})+', '+String(d).padStart(2,'0')+'/'+String(m).padStart(2,'0');
 }
+function activeCampaign(d=today()){ return (st?.campanhas||[]).find(c=>c.inicio<=d && d<=c.fim) || null; }
+function daysUntil(d){ const [y,m,dd]=d.split('-').map(Number), t=new Date(); t.setHours(0,0,0,0); return Math.round((new Date(y,m-1,dd)-t)/864e5); }
 function varValues(l){
-  const v = l ? l.s.v : {}, c = st.cfg;
+  const v = l ? l.s.v : {}, c = st.cfg, camp = activeCampaign();
   return {
     empresa: l?.emp || '',
     contato: (l?.s.contato||'').trim(),
@@ -521,6 +628,11 @@ function varValues(l){
     data_horario_1: v.data_horario_1 || '',
     data_horario_2: v.data_horario_2 || '',
     mensagem_personalizada: l?.msg || '',
+    portfolio: c.portfolio || '',
+    parceiros_fechados: c.parceiros_fechados || '',
+    campanha: camp?.nome || '',
+    fim_campanha: camp ? br(camp.fim) : '',
+    dias_restantes: camp && daysUntil(camp.fim)>0 ? String(daysUntil(camp.fim)) : '',
   };
 }
 const usedVars = txt => [...new Set([...String(txt).matchAll(VAR_RE)].map(m=>m[1]))];
@@ -535,7 +647,7 @@ function renderTpl(content, vals){
     const startsVar = /^\s*\{\{/.test(line);
     for(const v of VARS.filter(v=>v.inline && empty(v.k))){
       const t = `\\{\\{\\s*${v.k}\\s*\\}\\}`;
-      line = line.replace(new RegExp(`,\\s*${t}(?=\\s*[!?.,;:]|\\s*$)`,'g'),'')
+      line = line.replace(new RegExp(`,\\s*(?:Dr\\(a\\)\\.\\s*)?${t}(?=\\s*[!?.,;:]|\\s*$)`,'g'),'')
                  .replace(new RegExp(`^(\\s*)${t}\\s*,\\s*`),'$1')
                  .replace(new RegExp(`\\s+(?:em|de|da|do|na|no|para|pra|com)\\s+${t}`,'gi'),'')
                  .replace(new RegExp(t,'g'),'');
@@ -631,12 +743,17 @@ $('#rows').onclick = e => { const tr=e.target.closest('tr[data-id]'); if(tr) ope
 let selCat=null, selTpl=null;
 function defaultTpl(l, cat){
   const list = tplsOf(cat); if(!list.length) return null;
+  const act = list.filter(t=>tplActive(t));
+  const pick = arr => (arr.find(t=>t.nicho===l.nicho) || arr.find(t=>!t.nicho))?.id;
   // depois de "Posso te enviar?" no follow-up 2, quem responde geralmente quer os valores
   if(cat==='respondeu'){
     const last=[...l.s.hist].reverse().find(h=>h.tipo==='envio');
-    if(last && CL[last.cat] && last.cat==='fu2' && tplById('r_preco')) return 'r_preco';
+    if(last && last.cat==='fu2'){ const p=act.find(t=>t.preco) || tplById('r_preco'); if(p) return p.id; }
   }
-  return list[0].id;
+  // quem já conversou antes recebe o modelo de reativação, se houver um valendo
+  if(cat==='enviada' && l.s.hist.some(h=>h.tipo==='envio')){ const r=act.find(t=>t.reat); if(r) return r.id; }
+  // nos modelos gerais, os de nicho só entram se forem do nicho do lead
+  return pick(act.filter(t=>!t.nicho || t.nicho===l.nicho)) || act[0]?.id || list[0].id;
 }
 function openLead(id, keep){
   const changedLead = current!==id;
@@ -705,10 +822,11 @@ function drawerHTML(l){
     <div class="sendbox">
       <h3>💬 Mensagem</h3>
       <div class="cats">${CATS.map(c=>`<button data-cat="${c.k}" class="${c.k===selCat?'on':''}" title="${c.k===nextCat?'Próximo passo para este lead':''}">${c.e} ${c.l}${c.k===nextCat?'<span class="nx">●</span>':''}</button>`).join('')}</div>
-      <div class="chips">${tplsOf(selCat).map(x=>`<button data-tpl="${x.id}" class="${x.id===selTpl?'on':''}">${esc(x.nome)}</button>`).join('') || '<span class="hint" style="margin:0">Nenhum modelo nesta etapa.</span>'}
+      <div class="chips">${tplsOf(selCat).map(x=>`<button data-tpl="${x.id}" class="${x.id===selTpl?'on':''} ${tplActive(x)?'':'off'}" title="${tplActive(x)?(x.nicho?'Para '+esc(x.nicho):''):'Fora da validade ('+tplPeriod(x)+')'}">${esc(x.nome)}${x.nicho&&x.nicho===l.nicho?' ★':''}</button>`).join('') || '<span class="hint" style="margin:0">Nenhum modelo nesta etapa.</span>'}
         <button data-newtpl="1" title="Criar modelo nesta etapa">+ Novo</button></div>
       ${t ? `
       ${varInputs(l,t)}
+      ${!tplActive(t)?`<div class="warn">Este modelo vale só em ${tplPeriod(t)}. Confira os valores e prazos antes de enviar.</div>`:''}
       ${missing.length?`<div class="warn">Sem valor para ${missing.map(k=>'<b>'+esc(k)+'</b>').join(', ')}: ${missing.length>1?'esses trechos foram retirados':'esse trecho foi retirado'} da mensagem. Preencha acima para incluir.</div>`:''}
       ${fixo&&!inChat?`<div class="warn">Número fixo. Muitos comércios usam WhatsApp Business no fixo, então vale tentar. Se não abrir, ligue e peça o WhatsApp do responsável (roteiro em Ajustes).</div>`:''}
       <textarea class="inp" id="msg">${esc(fillFor(t,l))}</textarea>
@@ -840,6 +958,9 @@ function openEditor(id, cat, lead){
     <div class="grid2">
       <div><label>Nome</label><input id="eNome" value="${esc(t.nome)}" placeholder="ex.: Follow-up curto"></div>
       <div><label>Etapa</label><select id="eCat">${CATS.map(c=>`<option value="${c.k}" ${c.k===t.etapa?'selected':''}>${c.e} ${c.l}</option>`).join('')}</select></div>
+      <div><label>Válido de (opcional)</label><input type="date" id="eIni" value="${esc(t.inicio||'')}"></div>
+      <div><label>Válido até (opcional)</label><input type="date" id="eFim" value="${esc(t.fim||'')}"></div>
+      <div><label>Sugerir primeiro para o nicho</label><select id="eNicho"><option value="">Todos os nichos</option>${[...new Set(leads.map(l=>l.nicho))].sort().map(n=>`<option ${n===t.nicho?'selected':''}>${esc(n)}</option>`).join('')}</select></div>
     </div>
     <div class="ed">
       <div><label class="lb">Conteúdo</label><textarea class="inp" id="eTxt" style="width:100%">${esc(t.conteudo)}</textarea>
@@ -866,9 +987,11 @@ function openEditor(id, cat, lead){
   $('#eSave').onclick=()=>{
     const nome=$('#eNome').value.trim(), conteudo=$('#eTxt').value.trim(), etapa=$('#eCat').value;
     if(!nome || !conteudo){ alert('Preencha o nome e o conteúdo do modelo.'); return; }
+    const extra = {inicio:$('#eIni').value||undefined, fim:$('#eFim').value||undefined, nicho:$('#eNicho').value||undefined};
+    if(extra.inicio && extra.fim && extra.fim<extra.inicio){ alert('A data final da validade é antes da inicial.'); return; }
     let saved;
-    if(id){ Object.assign(t,{nome,conteudo,etapa}); saved=t; }
-    else { saved={id:uid(), etapa, nome, conteudo}; st.templates.push(saved); }
+    if(id){ Object.assign(t,{nome,conteudo,etapa},extra); saved=t; }
+    else { saved={id:uid(), etapa, nome, conteudo, ...extra}; st.templates.push(saved); }
     save(); closeModal(); toast('Modelo salvo');
     renderModelos();
     if(current){ selCat=saved.etapa; selTpl=saved.id; openLead(current,true); }
@@ -896,14 +1019,16 @@ function renderModelos(){
   const hl = s => esc(s).replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g,'<span class="v">{{$1}}</span>');
   $('#modelos').innerHTML = `
     <div class="box"><h3>Modelos de mensagem</h3>
-      <p class="sub">Cada etapa pode ter vários modelos. No lead, a etapa do próximo passo abre sozinha, e o primeiro modelo da lista é o sugerido (use ↑ ↓ para mudar a ordem).
+      <p class="sub">Cada etapa pode ter vários modelos. No lead, a etapa do próximo passo abre sozinha, e o primeiro modelo da lista que está valendo é o sugerido (use ↑ ↓ para mudar a ordem). Modelos de campanha têm validade e podem ser de um nicho específico.
       As variáveis são trocadas pelos dados do lead. Se um campo estiver vazio, aquele trecho some da mensagem.</p>
       <div class="vchips">${VARS.map(v=>`<span class="pill" title="${esc(v.d)}" style="font-family:ui-monospace,Consolas,monospace">{{${v.k}}}</span>`).join('')}</div>
       <div class="row" style="margin-top:8px"><button class="btn sm acc" id="newTpl">+ Novo modelo</button><button class="btn sm" id="resetTpl">Restaurar modelos padrão</button></div>
     </div>
     ${CATS.map(c=>{ const list=tplsOf(c.k); return `<div class="tplcat"><h3>${c.e} ${c.l} <span class="pill">${list.length}</span>
       <button class="btn xs" data-newin="${c.k}">+ Novo</button></h3>
-      <div class="tplgrid">${list.map((t,i)=>`<div class="tcard"><b>${esc(t.nome)}</b><pre>${hl(t.conteudo)}</pre>
+      <div class="tplgrid">${list.map((t,i)=>`<div class="tcard" style="${tplActive(t)?'':'opacity:.6'}"><b>${esc(t.nome)}</b>
+        ${t.inicio||t.fim||t.nicho?`<div class="row" style="gap:4px">${t.inicio||t.fim?`<span class="pill ${tplActive(t)?'s-fechado':''}">${tplActive(t)?'Valendo':'Vale'} ${tplPeriod(t)}</span>`:''}${t.nicho?`<span class="pill">${esc(t.nicho)}</span>`:''}</div>`:''}
+        <pre>${hl(t.conteudo)}</pre>
         <div class="row">
           <button class="btn xs" data-a="copy" data-id="${t.id}">Copiar mensagem</button>
           <button class="btn xs" data-a="edit" data-id="${t.id}">Editar</button>
@@ -914,7 +1039,7 @@ function renderModelos(){
           <button class="btn xs" data-a="down" data-id="${t.id}" ${i===list.length-1?'disabled':''} title="Descer">↓</button>
         </div></div>`).join('') || '<p class="hint">Nenhum modelo nesta etapa.</p>'}</div></div>`; }).join('')}`;
   $('#newTpl').onclick=()=>openEditor(null,'enviada');
-  $('#resetTpl').onclick=()=>{ if(confirm('Restaurar os modelos padrão? Os modelos que você editou ou criou serão substituídos.')){ const old=st.templates; st.templates=DEFAULT_TEMPLATES.map(t=>({...t})); save(); renderModelos(); toast('Modelos restaurados','Desfazer',()=>{ st.templates=old; save(); renderModelos(); }); } };
+  $('#resetTpl').onclick=()=>{ if(confirm('Restaurar os modelos padrão? Os modelos que você editou ou criou serão substituídos.')){ const old=st.templates; st.templates=DEFAULT_TEMPLATES.map(t=>({...t})); st.tplSeen=[...V1_IDS, ...CAMPAIGN_TEMPLATES.map(c=>c.id)]; save(); renderModelos(); toast('Modelos restaurados','Desfazer',()=>{ st.templates=old; save(); renderModelos(); }); } };
   document.querySelectorAll('[data-newin]').forEach(b=>b.onclick=()=>openEditor(null,b.dataset.newin));
   document.querySelectorAll('.tcard [data-a]').forEach(b=>b.onclick=()=>{
     const id=b.dataset.id, a=b.dataset.a;
@@ -950,6 +1075,42 @@ function renderFunil(){
   });
 }
 
+/* ---------- campanhas: metas e checklist ---------- */
+function campaignProgress(c){
+  const inW = d => d && d>=c.inicio && d<=c.fim;
+  const vs = st.fin.vendas.filter(v=>inW(v.data)), ms = st.fin.mensais.filter(m=>inW(m.inicio));
+  const ids = new Set([...vs, ...ms].map(x=>x.leadId || 'c:'+x.cliente));
+  return {clientes: ids.size, vendido: vs.reduce((a,v)=>a+v.valor,0), fixa: ms.reduce((a,m)=>a+m.valor,0)};
+}
+function meterRow(label, val, meta, fmt){
+  const pct = meta ? Math.min(100, Math.round(val/meta*100)) : 0;
+  return `<div style="margin:8px 0"><div class="row" style="justify-content:space-between;font-size:13px"><span>${label}</span><span class="num"><b>${fmt(val)}</b> de ${fmt(meta)} · ${pct}%</span></div><div class="meter" style="margin:4px 0"><i style="width:${pct}%"></i></div></div>`;
+}
+function campaignBox(c, compact){
+  const pr = campaignProgress(c), d = today(), state = d<c.inicio ? `começa em ${daysUntil(c.inicio)} dia(s)` : d>c.fim ? 'encerrada' : daysUntil(c.fim)===0 ? '<b class="due">último dia!</b>' : `faltam ${daysUntil(c.fim)} dia(s)`;
+  return `<div class="box"><h3>${esc(c.nome)}</h3><p class="sub">${br(c.inicio)} a ${br(c.fim)} · ${state}</p>
+    ${meterRow('Clientes fechados', pr.clientes, c.metaClientes, n=>n)}
+    ${meterRow('Vendido', pr.vendido, c.metaVendido, brl)}
+    ${meterRow('Receita fixa nova', pr.fixa, c.metaFixa, n=>brl(n)+'/mês')}
+    ${compact?'':`<p class="hint">Conta as vendas e mensalidades registradas em "Vendas e lucro" com data dentro da campanha.</p>`}</div>`;
+}
+function checklistBox(){
+  const d=today(), items=[...st.checklist].sort((a,b)=>(a.feito-b.feito) || (a.data||'').localeCompare(b.data||''));
+  const feitos=st.checklist.filter(i=>i.feito).length;
+  return `<div class="box"><h3>Checklist da campanha</h3><p class="sub">${feitos} de ${st.checklist.length} concluídos</p>
+    ${items.map(i=>`<label class="chk" style="color:var(--text);padding:5px 0;border-top:1px solid var(--line);align-items:flex-start">
+      <input type="checkbox" data-ck="${i.id}" ${i.feito?'checked':''} style="margin-top:3px">
+      <span style="flex:1;${i.feito?'text-decoration:line-through;color:var(--muted)':''}">${i.data?`<b class="${!i.feito&&i.data<d?'due':''}">${br(i.data)}</b> · `:''}${esc(i.txt)}</span>
+      <button class="btn xs" data-ckdel="${i.id}" title="Remover">×</button></label>`).join('')}
+    <div class="row" style="margin-top:8px"><input class="inp" id="ckTxt" placeholder="Nova tarefa" style="flex:1;min-width:140px"><input class="inp" type="date" id="ckData" style="width:150px"><button class="btn xs" id="ckAdd">Adicionar</button></div></div>`;
+}
+function bindChecklist(rerender){
+  document.querySelectorAll('[data-ck]').forEach(c=>c.onchange=()=>{ const i=st.checklist.find(x=>x.id===c.dataset.ck); i.feito=c.checked; save(); rerender(); });
+  document.querySelectorAll('[data-ckdel]').forEach(b=>b.onclick=e=>{ e.preventDefault(); const i=st.checklist.findIndex(x=>x.id===b.dataset.ckdel); const it=st.checklist[i]; st.checklist.splice(i,1); save(); rerender(); toast('Tarefa removida','Desfazer',()=>{ st.checklist.splice(i,0,it); save(); rerender(); }); });
+  if($('#ckAdd')) $('#ckAdd').onclick=()=>{ const txt=$('#ckTxt').value.trim(); if(!txt) return; st.checklist.push({id:uid(), txt, data:$('#ckData').value, feito:false}); save(); rerender(); };
+}
+const currentOrNextCampaign = () => activeCampaign() || [...st.campanhas].filter(c=>c.inicio>today()).sort((a,b)=>a.inicio.localeCompare(b.inicio))[0] || null;
+
 /* ---------- hoje ---------- */
 function renderHoje(){
   const due = leads.filter(isDue).sort((a,b)=>(a.s.prox>b.s.prox?1:-1));
@@ -958,6 +1119,8 @@ function renderHoje(){
   const n=sentToday(), meta=st.cfg.meta;
   const item = l => `<div class="li" data-id="${l.id}"><div><b>${esc(l.emp)}</b><small>${esc(l.cat)} · ${SL[l.s.status]}${l.s.prox?' · próximo: '+CL[NEXT_CAT[l.s.status]].l:''}</small></div>${l.s.prox?`<span class="${isDue(l)?'due':''}">${br(l.s.prox)}</span>`:`<span class="pill p-${esc(l.prio)}">${esc(l.prio)}</span>`}</div>`;
   $('#today').innerHTML = `
+    ${(()=>{ const c=currentOrNextCampaign(); return c?campaignBox(c,true):''; })()}
+    ${st.checklist.length?checklistBox():''}
     <div class="box"><h3>Meta de hoje</h3><p class="sub">${n} de ${meta} mensagens enviadas</p>
       <div class="meter"><i style="width:${Math.min(100,n/meta*100)}%"></i></div>
       <p class="hint">Mande uma por vez e personalize quando der. Melhor horário: terça a quinta, 9h–11h ou 14h–16h.</p>
@@ -965,6 +1128,7 @@ function renderHoje(){
     <div class="box"><h3>Ações para hoje</h3><p class="sub">${due.length ? due.length+' lead(s) esperando o próximo passo' : 'Nada vencido. 👌'}</p>${due.map(item).join('')}</div>
     <div class="box"><h3>Próximos a contatar</h3><p class="sub">Maior prioridade primeiro · ${next.length} com telefone</p>${next.slice(0,12).map(item).join('')}</div>`;
   document.querySelectorAll('#today .li').forEach(e=>e.onclick=()=>openLead(+e.dataset.id));
+  bindChecklist(renderHoje);
   const b=$('#startSeq'); if(b) b.onclick=()=>{
     ['q','fStatus','fPrio','fNicho','fPres','fDue'].forEach(id=>{ const e=$('#'+id); if(e.type==='checkbox') e.checked=false; else e.value=''; });
     $('#fStatus').value='a_contatar'; $('#fCanal').value='WhatsApp'; sortK='pts'; sortDir=-1;
@@ -983,7 +1147,19 @@ function renderCfg(){
         <div><label>{{valor_site}}</label><input data-cfg="valor_site" value="${esc(c.valor_site)}" placeholder="ex.: R$ 1.500"></div>
         <div><label>{{valor_manutencao}}</label><input data-cfg="valor_manutencao" value="${esc(c.valor_manutencao)}" placeholder="ex.: R$ 99"></div>
         <div><label>{{prazo}}</label><input data-cfg="prazo" value="${esc(c.prazo)}" placeholder="ex.: 15 dias"></div>
+        <div><label>{{portfolio}}</label><input data-cfg="portfolio" value="${esc(c.portfolio)}" placeholder="link do portfólio"></div>
+        <div><label>{{parceiros_fechados}} (vagas de Parceiro Koda já preenchidas)</label><input data-cfg="parceiros_fechados" value="${esc(c.parceiros_fechados)}" placeholder="ex.: 1"></div>
       </div></div>
+    <div class="box"><h3>Campanhas e metas</h3><p class="sub">Usadas em {{campanha}}, {{fim_campanha}} e {{dias_restantes}}, e nas metas da aba "Vendas e lucro".</p>
+      ${st.campanhas.map((k,i)=>`<div class="grid2 campgrid">
+        <div><label>Nome</label><input data-camp="${i}:nome" value="${esc(k.nome)}"></div>
+        <div><label>Início</label><input type="date" data-camp="${i}:inicio" value="${esc(k.inicio)}"></div>
+        <div><label>Fim</label><input type="date" data-camp="${i}:fim" value="${esc(k.fim)}"></div>
+        <div><label>Meta clientes</label><input data-camp="${i}:metaClientes" value="${k.metaClientes}" inputmode="numeric"></div>
+        <div><label>Meta vendido</label><input data-camp="${i}:metaVendido" value="${String(k.metaVendido).replace('.',',')}" inputmode="decimal"></div>
+        <div><label>Meta fixa/mês</label><input data-camp="${i}:metaFixa" value="${String(k.metaFixa).replace('.',',')}" inputmode="decimal"></div>
+        <button class="btn xs danger" data-campdel="${i}" title="Remover campanha">×</button></div>`).join('')}
+      <button class="btn xs" id="campAdd">+ Campanha</button></div>
     <div class="box"><h3>Como abrir o WhatsApp</h3><p class="sub">${EXT?'Na extensão, o CRM usa sempre a aba do WhatsApp Web. ':''}Todas usam o seu número. Nada é enviado sem você apertar Enter na conversa.</p>
       <div class="radio ${EXT?'hidden':''}">
         <label><input type="radio" name="modo" value="web" ${m==='web'?'checked':''}> WhatsApp Web (reaproveita a mesma aba)</label>
@@ -1007,6 +1183,13 @@ function renderCfg(){
         <button class="btn sm danger" id="reset">Apagar progresso dos leads</button>
       </div></div>`;
   document.querySelectorAll('[data-cfg]').forEach(i=>i.onchange=()=>{ st.cfg[i.dataset.cfg]=i.value.trim(); save(); toast('Salvo'); });
+  document.querySelectorAll('[data-camp]').forEach(inp=>inp.onchange=()=>{
+    const [i,k]=inp.dataset.camp.split(':'), c=st.campanhas[+i];
+    c[k] = k.startsWith('meta') ? parseMoney(inp.value) : inp.value.trim();
+    save(); toast('Campanha salva');
+  });
+  document.querySelectorAll('[data-campdel]').forEach(b=>b.onclick=()=>{ const i=+b.dataset.campdel, c=st.campanhas[i]; if(!confirm(`Remover a campanha "${c.nome}"?`)) return; st.campanhas.splice(i,1); save(); renderCfg(); toast('Campanha removida','Desfazer',()=>{ st.campanhas.splice(i,0,c); save(); renderCfg(); }); });
+  $('#campAdd').onclick=()=>{ st.campanhas.push({id:uid(), nome:'Nova campanha', inicio:today(), fim:addDays(30), metaClientes:0, metaVendido:0, metaFixa:0}); save(); renderCfg(); };
   document.querySelectorAll('[name=modo]').forEach(r=>r.onchange=()=>{ st.cfg.modo=r.value; save(); });
   $('#meta').onchange=e=>{ st.cfg.meta=Math.max(1,+e.target.value||25); save(); renderStats(); };
   $('#avancar').onchange=e=>{ st.cfg.avancar=e.target.value==='1'; save(); };
@@ -1100,6 +1283,7 @@ function renderVendas(){
         <button class="btn xs" id="finTbl">${finTable?'Ver gráfico':'Ver tabela'}</button></div></div>
       <div id="finChart"></div>
     </div>
+    ${st.campanhas.length?`<h3 style="margin:20px 0 8px;font-size:15px">Metas das campanhas</h3><div class="today">${st.campanhas.map(c=>campaignBox(c)).join('')}</div>`:''}
     <div class="box" style="margin-top:16px"><h3>Vendas no período</h3>
       ${vendasP.length?`<div class="tablewrap"><table class="ft"><thead><tr><th>Data</th><th>Cliente</th><th>Serviço</th><th class="r">Valor</th><th class="r">Custo</th><th class="r">Lucro</th><th>Pagamento</th><th></th></tr></thead><tbody>
       ${vendasP.map(v=>{ const pend=v.valor-(v.recebido||0); return `<tr><td>${br(v.data)}</td><td>${leadLink(v.leadId)||esc(v.cliente)}</td><td>${esc(v.servico)}</td>
