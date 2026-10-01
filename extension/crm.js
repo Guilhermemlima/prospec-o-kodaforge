@@ -195,6 +195,7 @@ function load(){
   s.leads = s.leads || {};
   s.templates = Array.isArray(s.templates) ? s.templates : DEFAULT_TEMPLATES.map(t=>({...t}));
   delete s.tpl; // formato antigo
+  s.fin = Object.assign({vendas:[], mensais:[], despesas:[]}, s.fin||{});
   s.cfg = Object.assign({modo:'web', meta:25, avancar:true, nome_vendedor:'Guilherme', cidade:'Guarapuava', valor_site:'', valor_manutencao:'', prazo:''}, s.cfg||{});
   return s;
 }
@@ -452,7 +453,10 @@ function drawerHTML(l){
       <button class="btn sm" data-q="fechado">✓ Fechou</button>
       <button class="btn sm danger" data-q="perdido">Sem interesse</button>
       ${['sem_retorno','perdido'].includes(l.s.status)?'<button class="btn sm" id="reativar">↺ Reativar</button>':''}
+      ${['negociando','fechado'].includes(l.s.status)?'<button class="btn sm" id="regVenda">💰 Registrar venda</button>':''}
     </div>
+    ${(()=>{ const vs=salesOf(l.id), ms=st.fin.mensais.filter(c=>c.leadId===l.id); if(!vs.length&&!ms.length) return '';
+      return `<div class="box" style="margin-top:14px;padding:10px 12px"><b>💰 Vendas deste cliente</b>${vs.map(v=>`<div class="row" style="justify-content:space-between;margin-top:6px"><span>${br(v.data)} · ${esc(v.servico||'Projeto')}</span><span class="num"><b>${brl(v.valor)}</b>${v.valor-(v.recebido||0)>0?` <small class="due">falta ${brl(v.valor-(v.recebido||0))}</small>`:''} <button class="btn xs" data-editv="venda:${v.id}">Editar</button></span></div>`).join('')}${ms.map(c=>`<div class="row" style="justify-content:space-between;margin-top:6px"><span>Manutenção desde ${br(c.inicio)}${c.fim?' (encerrada)':''}</span><span class="num"><b>${brl(c.valor)}/mês</b> <button class="btn xs" data-editv="mensal:${c.id}">Editar</button></span></div>`).join('')}</div>`; })()}
 
     <h4>Histórico</h4>
     ${l.s.hist.length ? `<ul class="hist">${[...l.s.hist].reverse().map(h=>`<li class="${h.tipo||''}"><time>${esc(br(h.t))} ${esc(h.t.slice(11))}</time>${
@@ -479,6 +483,8 @@ function bindDrawer(l){
   });
   document.querySelectorAll('[data-q]').forEach(b=>b.onclick=()=>setStatus(l,b.dataset.q));
   if($('#reativar')) $('#reativar').onclick=()=>{ const snap=snapshot(l); log(l,'Reativado: '+SL[l.s.status]+' → A contatar'); l.s.status='a_contatar'; l.s.prox=today(); save(); refresh(); openLead(l.id); toast('Lead reativado','Desfazer',()=>restore(l,snap)); };
+  if($('#regVenda')) $('#regVenda').onclick=()=>openFinForm('venda',null,{leadId:l.id, cliente:l.emp, servico:'Site', valor:parseMoney(l.s.v.valor_site||st.cfg.valor_site), data:today(), mensal:!salesOf(l.id).length && !!(l.s.v.valor_manutencao||st.cfg.valor_manutencao), mensalValor:l.s.v.valor_manutencao||st.cfg.valor_manutencao||''});
+  document.querySelectorAll('[data-editv]').forEach(b=>b.onclick=()=>{ const [k,id]=b.dataset.editv.split(':'); openFinForm(k,id); });
   if(!$('#msg')) return;
   const t=tplById(selTpl);
   $('#copy').onclick=()=>{ const text=$('#msg').value; copyText(text); toast('Mensagem copiada','Registrar como enviada',()=>registerSend(l,t,text,false)); };
@@ -501,6 +507,7 @@ function setStatus(l,k){
   if(['respondeu','negociando'].includes(k) && (!l.s.prox || l.s.prox<today())) l.s.prox=today();
   save(); refresh(); if(current===l.id) openLead(l.id);
   toast(l.emp+': '+SL[k],'Desfazer',()=>restore(l,snap));
+  if(k==='fechado') promptSale(l);
 }
 function openWA(l,text){
   if(EXT) return extOpenWA(l,text);
@@ -698,7 +705,7 @@ function renderCfg(){
       1ª mensagem → follow-up 1 em <b>2 dias</b> → follow-up 2 em mais <b>4 dias</b> → última mensagem em mais <b>7 dias</b> → depois de <b>7 dias</b> sem resposta, vai para <b>Sem retorno</b> (pode ser reativado).
       Modelos de "Respondeu" e "Proposta / reunião" levam o lead para essas etapas e agendam retorno em 2 e 3 dias.</p></div>
     <div class="box"><h3>Roteiro de ligação (números fixos)</h3><p class="hint" style="font-size:13px;white-space:pre-wrap">${esc(DATA.scripts['LIGAÇÃO (número fixo)'])}</p></div>
-    <div class="box"><h3>Backup e exportação</h3><p class="sub">Os dados (leads, histórico e modelos) ficam salvos neste navegador. Faça backup de vez em quando ou para levar a outro computador.</p>
+    <div class="box"><h3>Backup e exportação</h3><p class="sub">Os dados (leads, histórico, modelos e vendas) ficam salvos neste navegador. Faça backup de vez em quando ou para levar a outro computador.</p>
       <div class="row">
         <button class="btn sm" id="bkp">Baixar backup (.json)</button>
         <label class="btn sm">Restaurar backup<input type="file" id="imp" accept=".json" hidden></label>
@@ -724,12 +731,221 @@ function exportCSV(){
   download(`crm-kodaforge-${today()}.csv`, '﻿'+[head.map(q).join(';'),...lines].join('\r\n'), 'text/csv');
 }
 
+/* ---------- vendas e lucro ---------- */
+// vendas: projetos (valor único) · mensais: manutenção recorrente · despesas: avulsas ou mensais fixas
+const BRL = new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'});
+const brl = n => BRL.format(n||0);
+const brlShort = n => Math.abs(n)>=1000 ? 'R$ '+(n/1000).toLocaleString('pt-BR',{maximumFractionDigits:1})+' mil' : brl(n).replace(',00','');
+function parseMoney(v){
+  let s=String(v??'').replace(/[^\d,.-]/g,''); if(!s) return 0;
+  if(s.includes(',')) s=s.replace(/\./g,'').replace(',','.');
+  else if(/^\d{1,3}(\.\d{3})+$/.test(s)) s=s.replace(/\./g,'');
+  return Math.round((parseFloat(s)||0)*100)/100;
+}
+const ym = d => d.slice(0,7);
+const curYM = () => today().slice(0,7);
+function addMonths(m,n){ let [y,mo]=m.split('-').map(Number); mo+=n; while(mo>12){mo-=12;y++;} while(mo<1){mo+=12;y--;} return y+'-'+String(mo).padStart(2,'0'); }
+function monthsBetween(a,b){ const out=[]; for(let m=a; m<=b; m=addMonths(m,1)) out.push(m); return out; }
+const MES = ['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
+const mLabel = m => MES[+m.slice(5)-1]+'/'+m.slice(2,4);
+const activeIn = (ini,fim,m) => ini && ym(ini)<=m && (!fim || ym(fim)>=m);
+
+function monthFigures(m){
+  const F=st.fin, r={m, vendas:0, custoVendas:0, mensal:0, custoMensal:0, despesas:0, nVendas:0};
+  for(const v of F.vendas) if(ym(v.data)===m){ r.vendas+=v.valor; r.custoVendas+=v.custo||0; r.nVendas++; }
+  for(const c of F.mensais) if(activeIn(c.inicio,c.fim,m)){ r.mensal+=c.valor; r.custoMensal+=c.custo||0; }
+  for(const d of F.despesas) if(d.mensal ? activeIn(d.data,d.fim,m) : ym(d.data)===m) r.despesas+=d.valor;
+  r.fat=r.vendas+r.mensal; r.custos=r.custoVendas+r.custoMensal+r.despesas; r.lucro=r.fat-r.custos;
+  return r;
+}
+const PERIODS = {mes:'Este mês', ant:'Mês anterior', tri:'Últimos 3 meses', ano:'Este ano', d12:'Últimos 12 meses', tudo:'Tudo'};
+function periodRange(p){
+  const c=curYM();
+  if(p==='ant') return [addMonths(c,-1), addMonths(c,-1)];
+  if(p==='tri') return [addMonths(c,-2), c];
+  if(p==='ano') return [c.slice(0,4)+'-01', c];
+  if(p==='d12') return [addMonths(c,-11), c];
+  if(p==='tudo'){
+    const F=st.fin, ds=[...F.vendas.map(v=>v.data), ...F.mensais.map(x=>x.inicio), ...F.despesas.map(d=>d.data)].filter(Boolean).sort();
+    return [ds.length?ym(ds[0]):c, c];
+  }
+  return [c,c];
+}
+let finPeriod='mes', finTable=false;
+function renderVendas(){
+  const F=st.fin, [a,b]=periodRange(finPeriod), months=monthsBetween(a,b);
+  const tot = months.map(monthFigures).reduce((s,r)=>{ for(const k in r) if(k!=='m') s[k]=(s[k]||0)+r[k]; return s; },{});
+  const inRange = d => d && ym(d)>=a && ym(d)<=b;
+  const aReceber = F.vendas.reduce((s,v)=>s+Math.max(0,v.valor-(v.recebido||0)),0);
+  const mrr = F.mensais.filter(c=>activeIn(c.inicio,c.fim,curYM())).reduce((s,c)=>s+c.valor,0);
+  const fechados = leads.filter(l=>l.s.status==='fechado').length, contatados = leads.filter(l=>l.s.status!=='a_contatar').length;
+  const margem = tot.fat ? Math.round(tot.lucro/tot.fat*100) : null;
+  const vendasP = F.vendas.filter(v=>inRange(v.data)).sort((x,y)=>y.data.localeCompare(x.data));
+  const despP = F.despesas.filter(d=>d.mensal ? months.some(m=>activeIn(d.data,d.fim,m)) : inRange(d.data)).sort((x,y)=>y.data.localeCompare(x.data));
+  const mensais = [...F.mensais].sort((x,y)=>(x.fim?1:0)-(y.fim?1:0) || y.inicio.localeCompare(x.inicio));
+  const tile = (label,val,sub,cls='') => `<div class="kpi ${cls}"><span>${label}</span><b>${val}</b>${sub?`<small>${sub}</small>`:''}</div>`;
+  const leadLink = id => id && byId[id] ? `<a href="#" data-lead="${id}">${esc(byId[id].emp)}</a>` : '';
+  $('#vendas').innerHTML = `
+    <div class="finbar">
+      <div class="seg">${Object.entries(PERIODS).map(([k,l])=>`<button data-per="${k}" class="${k===finPeriod?'on':''}">${l}</button>`).join('')}</div>
+      <div class="row" style="margin-left:auto"><button class="btn sm acc" data-new="venda">+ Venda</button><button class="btn sm" data-new="mensal">+ Mensalidade</button><button class="btn sm" data-new="despesa">+ Despesa</button></div>
+    </div>
+    <p class="hint" style="margin:0 0 12px">${a===b?mLabel(a):mLabel(a)+' a '+mLabel(b)} · vendas contam na data da venda; mensalidades e despesas fixas contam em cada mês em que estão ativas.</p>
+    <div class="kpis">
+      ${tile('Faturamento', brl(tot.fat), `${brl(tot.vendas)} em projetos · ${brl(tot.mensal)} em mensalidades`)}
+      ${tile('Custos e despesas', brl(tot.custos), `${brl(tot.custoVendas+tot.custoMensal)} diretos · ${brl(tot.despesas)} despesas`)}
+      ${tile('Lucro', brl(tot.lucro), margem===null?'sem faturamento no período':`margem de ${margem}%`, tot.lucro<0?'neg':'pos')}
+      ${tile('Vendas fechadas', tot.nVendas||0, tot.nVendas?`ticket médio ${brl(tot.vendas/tot.nVendas)}`:'nenhuma no período')}
+      ${tile('A receber', brl(aReceber), 'total em aberto das vendas')}
+      ${tile('Receita recorrente', brl(mrr)+'<small style="display:inline;font-size:13px">/mês</small>', `${F.mensais.filter(c=>activeIn(c.inicio,c.fim,curYM())).length} mensalidade(s) ativa(s)`)}
+      ${tile('Conversão do funil', contatados?Math.round(fechados/contatados*100)+'%':'—', `${fechados} fechado(s) de ${contatados} contatado(s)`)}
+    </div>
+    <div class="box" style="margin-top:16px">
+      <div class="row" style="justify-content:space-between"><h3>Faturamento e lucro por mês</h3>
+        <div class="row"><span class="lg"><i style="background:var(--s1)"></i>Faturamento</span><span class="lg"><i style="background:var(--s2)"></i>Lucro</span>
+        <button class="btn xs" id="finTbl">${finTable?'Ver gráfico':'Ver tabela'}</button></div></div>
+      <div id="finChart"></div>
+    </div>
+    <div class="box" style="margin-top:16px"><h3>Vendas no período</h3>
+      ${vendasP.length?`<div class="tablewrap"><table class="ft"><thead><tr><th>Data</th><th>Cliente</th><th>Serviço</th><th class="r">Valor</th><th class="r">Custo</th><th class="r">Lucro</th><th>Pagamento</th><th></th></tr></thead><tbody>
+      ${vendasP.map(v=>{ const pend=v.valor-(v.recebido||0); return `<tr><td>${br(v.data)}</td><td>${leadLink(v.leadId)||esc(v.cliente)}</td><td>${esc(v.servico)}</td>
+        <td class="r num">${brl(v.valor)}</td><td class="r num">${brl(v.custo)}</td><td class="r num">${brl(v.valor-(v.custo||0))}</td>
+        <td>${pend<=0?'<span class="pill s-fechado">Pago</span>':(v.recebido?`<span class="pill s-respondeu">Falta ${brl(pend)}</span>`:'<span class="pill s-perdido">A receber</span>')}${v.forma?` <small style="color:var(--muted)">${esc(v.forma)}</small>`:''}</td>
+        <td class="r"><button class="btn xs" data-edit="venda:${v.id}">Editar</button></td></tr>`; }).join('')}</tbody></table></div>`:'<p class="hint">Nenhuma venda neste período. Quando um lead for para "Fechado", o CRM já abre o registro da venda.</p>'}
+    </div>
+    <div class="box" style="margin-top:16px"><h3>Mensalidades de manutenção</h3>
+      ${mensais.length?`<div class="tablewrap"><table class="ft"><thead><tr><th>Cliente</th><th>Início</th><th class="r">Valor/mês</th><th class="r">Custo/mês</th><th>Situação</th><th></th></tr></thead><tbody>
+      ${mensais.map(c=>`<tr><td>${leadLink(c.leadId)||esc(c.cliente)}</td><td>${br(c.inicio)}</td><td class="r num">${brl(c.valor)}</td><td class="r num">${brl(c.custo)}</td>
+        <td>${c.fim?`<span class="pill">Encerrada em ${br(c.fim)}</span>`:'<span class="pill s-fechado">Ativa</span>'}</td><td class="r"><button class="btn xs" data-edit="mensal:${c.id}">Editar</button></td></tr>`).join('')}</tbody></table></div>`:'<p class="hint">Nenhuma mensalidade cadastrada.</p>'}
+    </div>
+    <div class="box" style="margin-top:16px"><h3>Despesas no período</h3>
+      ${despP.length?`<div class="tablewrap"><table class="ft"><thead><tr><th>Data</th><th>Descrição</th><th>Categoria</th><th class="r">Valor</th><th>Tipo</th><th></th></tr></thead><tbody>
+      ${despP.map(d=>`<tr><td>${br(d.data)}</td><td>${esc(d.descricao)}</td><td>${esc(d.categoria||'')}</td><td class="r num">${brl(d.valor)}</td>
+        <td>${d.mensal?(d.fim?`Mensal até ${br(d.fim)}`:'Mensal fixa'):'Avulsa'}</td><td class="r"><button class="btn xs" data-edit="despesa:${d.id}">Editar</button></td></tr>`).join('')}</tbody></table></div>`:'<p class="hint">Nenhuma despesa neste período. Cadastre domínio, hospedagem, ferramentas, anúncios…</p>'}
+      <div class="row" style="margin-top:10px"><button class="btn xs" id="finCsv">Exportar financeiro (.csv)</button></div>
+    </div>`;
+  document.querySelectorAll('[data-per]').forEach(b=>b.onclick=()=>{ finPeriod=b.dataset.per; try{sessionStorage.setItem(KEY+'-per',finPeriod);}catch(e){} renderVendas(); });
+  document.querySelectorAll('[data-new]').forEach(b=>b.onclick=()=>openFinForm(b.dataset.new));
+  document.querySelectorAll('[data-edit]').forEach(b=>b.onclick=()=>{ const [k,id]=b.dataset.edit.split(':'); openFinForm(k, id); });
+  document.querySelectorAll('#vendas [data-lead]').forEach(a=>a.onclick=e=>{ e.preventDefault(); openLead(+a.dataset.lead); });
+  $('#finTbl').onclick=()=>{ finTable=!finTable; renderVendas(); };
+  $('#finCsv').onclick=exportFinCSV;
+  renderFinChart(addMonths(b,-11), b);
+}
+function renderFinChart(a,b){
+  const rows = monthsBetween(a,b).map(monthFigures);
+  if(finTable){
+    $('#finChart').innerHTML = `<div class="tablewrap"><table class="ft"><thead><tr><th>Mês</th><th class="r">Faturamento</th><th class="r">Custos</th><th class="r">Lucro</th><th class="r">Vendas</th></tr></thead><tbody>
+      ${rows.map(r=>`<tr><td>${mLabel(r.m)}</td><td class="r num">${brl(r.fat)}</td><td class="r num">${brl(r.custos)}</td><td class="r num">${brl(r.lucro)}</td><td class="r num">${r.nVendas}</td></tr>`).join('')}</tbody></table></div>`;
+    return;
+  }
+  const W=Math.max(320, $('#finChart').clientWidth||800), H=240, padL=64, padR=8, padT=12, padB=26;
+  const vals = rows.flatMap(r=>[r.fat,r.lucro]);
+  let max=Math.max(0,...vals), min=Math.min(0,...vals);
+  if(max===min) max=1000;
+  const step = niceStep((max-min)/4); max=Math.ceil(max/step)*step; min=Math.floor(min/step)*step;
+  const y = v => padT+(max-v)/(max-min)*(H-padT-padB);
+  const band=(W-padL-padR)/rows.length, bw=Math.min(18,(band-10)/2);
+  let ticks=''; for(let v=min; v<=max+1e-9; v+=step) ticks+=`<line x1="${padL}" x2="${W-padR}" y1="${y(v)}" y2="${y(v)}" stroke="var(--line)" ${v===0?'':'stroke-dasharray="2 3"'}/><text x="${padL-8}" y="${y(v)+4}" text-anchor="end" class="ax">${brlShort(v)}</text>`;
+  const bar=(v,x,fill)=>{ if(!v) return ''; const y0=y(0), y1=y(v), h=Math.max(1,Math.abs(y0-y1)), top=Math.min(y0,y1), r=Math.min(4,h,bw/2);
+    // canto arredondado só na ponta do dado, base reta no zero
+    return v>0 ? `<path d="M${x},${y0} V${top+r} Q${x},${top} ${x+r},${top} H${x+bw-r} Q${x+bw},${top} ${x+bw},${top+r} V${y0} Z" fill="${fill}"/>`
+               : `<path d="M${x},${y0} V${top+h-r} Q${x},${top+h} ${x+r},${top+h} H${x+bw-r} Q${x+bw},${top+h} ${x+bw},${top+h-r} V${y0} Z" fill="${fill}"/>`; };
+  const g = rows.map((r,i)=>{ const cx=padL+band*i+band/2, x1=cx-bw-1, x2=cx+1;
+    return `<g><rect x="${padL+band*i}" y="${padT}" width="${band}" height="${H-padT-padB}" fill="transparent" rx="6" class="bgh"/>${bar(r.fat,x1,'var(--s1)')}${bar(r.lucro,x2,'var(--s2)')}<text x="${cx}" y="${H-8}" text-anchor="middle" class="ax">${mLabel(r.m)}</text>
+      <rect x="${padL+band*i}" y="${padT}" width="${band}" height="${H-padT-padB}" fill="transparent" data-i="${i}" class="hit"/></g>`; }).join('');
+  $('#finChart').innerHTML = `<div style="position:relative"><svg width="100%" viewBox="0 0 ${W} ${H}" role="img" aria-label="Faturamento e lucro dos últimos 12 meses">${ticks}${g}</svg><div class="tip hidden" id="finTip"></div></div>`;
+  const tip=$('#finTip');
+  $('#finChart').querySelectorAll('.hit').forEach(h=>{
+    h.onmouseenter=()=>{ const r=rows[+h.dataset.i]; h.parentNode.querySelector('.bgh').setAttribute('fill','var(--panel2)');
+      tip.innerHTML=`<b>${mLabel(r.m)}</b><div><i style="background:var(--s1)"></i>Faturamento <span>${brl(r.fat)}</span></div><div><i style="background:var(--s2)"></i>Lucro <span>${brl(r.lucro)}</span></div><div class="mut">Custos ${brl(r.custos)} · ${r.nVendas} venda(s)</div>`;
+      tip.classList.remove('hidden'); const sv=$('#finChart svg').getBoundingClientRect(), hb=h.getBoundingClientRect();
+      let left=hb.left-sv.left+hb.width/2+8; if(left+200>sv.width) left=hb.left-sv.left+hb.width/2-208; tip.style.left=left+'px'; tip.style.top='8px'; };
+    h.onmouseleave=()=>{ h.parentNode.querySelector('.bgh').setAttribute('fill','transparent'); tip.classList.add('hidden'); };
+  });
+}
+function niceStep(raw){ const p=Math.pow(10,Math.floor(Math.log10(raw||1))), n=raw/p; return (n<=1?1:n<=2?2:n<=5?5:10)*p; }
+
+const FIN_FORMS = {
+  venda: {title:'venda', list:'vendas', fields:[
+    ['cliente','Cliente (lead ou nome)','lead'], ['servico','Serviço','text','Site institucional'], ['data','Data da venda','date'],
+    ['valor','Valor da venda','money'], ['custo','Custos do projeto (freelancer, tema, domínio…)','money'], ['recebido','Valor já recebido','money'],
+    ['forma','Forma de pagamento','text','Pix, cartão, 50% + 50%…'], ['obs','Observações','textarea']]},
+  mensal: {title:'mensalidade', list:'mensais', fields:[
+    ['cliente','Cliente (lead ou nome)','lead'], ['valor','Valor mensal','money'], ['custo','Custo mensal (hospedagem, ferramentas…)','money'],
+    ['inicio','Início','date'], ['fim','Encerrada em (deixe vazio se ativa)','date'], ['obs','Observações','textarea']]},
+  despesa: {title:'despesa', list:'despesas', fields:[
+    ['descricao','Descrição','text','ex.: Hospedagem, domínio, anúncios'], ['categoria','Categoria','text','Ferramentas, Marketing, Impostos…'], ['valor','Valor','money'],
+    ['data','Data (ou início, se mensal)','date'], ['mensal','Despesa mensal fixa (repete todo mês)','check'], ['fim','Encerrada em (só para mensal)','date']]},
+};
+function openFinForm(kind, id, preset){
+  const F=FIN_FORMS[kind], arr=st.fin[F.list], item = id ? arr.find(x=>x.id===id) : Object.assign({data:today(), inicio:today()}, preset||{});
+  const val = k => k==='cliente' ? (item.leadId && byId[item.leadId] ? byId[item.leadId].emp : item.cliente||'') : item[k];
+  const fld = ([k,label,type,ph]) => {
+    const v=val(k);
+    if(type==='textarea') return `<div style="grid-column:1/-1"><label>${label}</label><textarea class="inp" data-f="${k}" rows="2" style="width:100%">${esc(v||'')}</textarea></div>`;
+    if(type==='check') return `<div style="grid-column:1/-1"><label class="chk" style="color:var(--text)"><input type="checkbox" data-f="${k}" ${v?'checked':''}> ${label}</label></div>`;
+    const t = type==='money' ? 'text' : type==='lead' ? 'text' : type;
+    return `<div><label>${label}</label><input data-f="${k}" type="${t}" ${type==='money'?'inputmode="decimal" placeholder="R$ 0,00"':''} ${type==='lead'?'list="leadNames" placeholder="Digite para buscar"':''} ${ph&&type!=='money'?`placeholder="${esc(ph)}"`:''} value="${esc(type==='money'&&v?String(v).replace('.',','):v||'')}"></div>`;
+  };
+  $('#modalRoot').innerHTML = `<div class="modal" id="modalBg"><div class="dialog" role="dialog" aria-modal="true" style="width:min(640px,100%)">
+    <h3>${id?'Editar':'Nova'} ${F.title}</h3>
+    <datalist id="leadNames">${leads.map(l=>`<option value="${esc(l.emp)}">`).join('')}</datalist>
+    <div class="grid2">${F.fields.map(fld).join('')}
+      ${kind==='venda'&&!id?`<div style="grid-column:1/-1"><label class="chk" style="color:var(--text)"><input type="checkbox" id="fMensal" ${preset?.mensal?'checked':''}> Também criar mensalidade de manutenção de <input id="fMensalV" class="inp" style="width:120px;display:inline-block;padding:3px 6px" value="${esc(preset?.mensalValor||st.cfg.valor_manutencao||'')}" placeholder="R$ 0,00"></label></div>`:''}
+    </div>
+    <div class="row" style="margin-top:6px">
+      ${id?`<button class="btn sm danger" id="fDel">Excluir</button>`:''}
+      <span style="margin-left:auto"></span><button class="btn" id="fCancel">Cancelar</button><button class="btn acc" id="fSave">Salvar</button>
+    </div></div></div>`;
+  $('#modalBg').onclick=e=>{ if(e.target.id==='modalBg') closeModal(); };
+  $('#fCancel').onclick=closeModal;
+  if($('#fDel')) $('#fDel').onclick=()=>{ if(!confirm(`Excluir esta ${F.title}?`)) return; const i=arr.indexOf(item); arr.splice(i,1); save(); closeModal(); afterFin(); toast(`${F.title[0].toUpperCase()+F.title.slice(1)} excluída`,'Desfazer',()=>{ arr.splice(i,0,item); save(); afterFin(); }); };
+  $('#fSave').onclick=()=>{
+    const out={...item};
+    document.querySelectorAll('#modalRoot [data-f]').forEach(inp=>{
+      const k=inp.dataset.f, type=F.fields.find(f=>f[0]===k)[2];
+      out[k] = type==='check' ? inp.checked : type==='money' ? parseMoney(inp.value) : inp.value.trim();
+    });
+    if('cliente' in out){ const l=leads.find(x=>norm(x.emp)===norm(out.cliente)); out.leadId=l?l.id:null; }
+    if(kind==='despesa' && !out.descricao){ alert('Preencha a descrição.'); return; }
+    if(kind!=='despesa' && !out.cliente){ alert('Preencha o cliente.'); return; }
+    if(!out.valor){ alert('Preencha o valor.'); return; }
+    if(kind==='venda' && !out.data || kind==='mensal' && !out.inicio || kind==='despesa' && !out.data){ alert('Preencha a data.'); return; }
+    if(id) Object.assign(item,out); else { out.id=uid(); arr.push(out); }
+    if(kind==='venda' && !id && $('#fMensal')?.checked){
+      const mv=parseMoney($('#fMensalV').value);
+      if(mv) st.fin.mensais.push({id:uid(), leadId:out.leadId, cliente:out.cliente, valor:mv, custo:0, inicio:out.data, fim:''});
+    }
+    if(out.leadId && kind!=='despesa' && !id){ const l=byId[out.leadId]; log(l, kind==='venda'?`Venda registrada: ${out.servico||'projeto'} · ${brl(out.valor)}`:`Mensalidade: ${brl(out.valor)}/mês`); if(kind==='venda' && l.s.status!=='fechado'){ log(l,'Etapa: '+SL[l.s.status]+' → Fechado'); l.s.status='fechado'; l.s.prox=null; } }
+    save(); closeModal(); afterFin(); toast(`${F.title[0].toUpperCase()+F.title.slice(1)} salva`);
+  };
+  setTimeout(()=>$('#modalRoot [data-f]')?.focus(),0);
+}
+function afterFin(){ refresh(); if(!$('#v-vendas').classList.contains('hidden')) renderVendas(); if(current) openLead(current,true); }
+function salesOf(id){ return st.fin.vendas.filter(v=>v.leadId===id); }
+function promptSale(l){
+  if(salesOf(l.id).length) return;
+  openFinForm('venda', null, {leadId:l.id, cliente:l.emp, servico:'Site', valor:parseMoney(l.s.v.valor_site||st.cfg.valor_site), data:today(),
+    mensal:!!(l.s.v.valor_manutencao||st.cfg.valor_manutencao), mensalValor:l.s.v.valor_manutencao||st.cfg.valor_manutencao||''});
+}
+function exportFinCSV(){
+  const q=v=>'"'+String(v??'').replace(/"/g,'""')+'"', n=v=>String(v||0).replace('.',',');
+  const lines=[['Tipo','Data/Início','Fim','Cliente/Descrição','Serviço/Categoria','Valor','Custo','Recebido','Forma','Observações'].map(q).join(';')];
+  for(const v of st.fin.vendas) lines.push(['Venda',br(v.data),'',v.cliente,v.servico,n(v.valor),n(v.custo),n(v.recebido),v.forma,v.obs].map(q).join(';'));
+  for(const c of st.fin.mensais) lines.push(['Mensalidade',br(c.inicio),br(c.fim),c.cliente,'Manutenção',n(c.valor),n(c.custo),'','',c.obs].map(q).join(';'));
+  for(const d of st.fin.despesas) lines.push([d.mensal?'Despesa mensal':'Despesa',br(d.data),br(d.fim),d.descricao,d.categoria,n(d.valor),'','','',''].map(q).join(';'));
+  download(`financeiro-kodaforge-${today()}.csv`, '﻿'+lines.join('\r\n'), 'text/csv');
+}
+try{ finPeriod=sessionStorage.getItem(KEY+'-per')||'mes'; }catch(e){}
+window.addEventListener('resize',()=>{ if(!$('#v-vendas').classList.contains('hidden') && !finTable) renderVendas(); });
+
 /* ---------- navegação ---------- */
-const VIEWS=['lista','funil','hoje','modelos','config'];
+const VIEWS=['lista','funil','hoje','vendas','modelos','config'];
 function show(v){
   document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('on',b.dataset.v===v));
   VIEWS.forEach(x=>$('#v-'+x).classList.toggle('hidden',x!==v));
-  if(v==='funil') renderFunil(); if(v==='hoje') renderHoje(); if(v==='modelos') renderModelos(); if(v==='config') renderCfg();
+  if(v==='funil') renderFunil(); if(v==='hoje') renderHoje(); if(v==='modelos') renderModelos(); if(v==='vendas') renderVendas(); if(v==='config') renderCfg();
   try{ sessionStorage.setItem(KEY+'-tab',v); }catch(e){}
 }
 document.querySelectorAll('#tabs button').forEach(b=>b.onclick=()=>show(b.dataset.v));

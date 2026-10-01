@@ -8,6 +8,7 @@ A etapa do funil, o histórico (qual modelo foi enviado) e a próxima ação sã
 
 - **Modelos de mensagem:** vários modelos por etapa (1ª mensagem, follow-ups, última, respondeu, proposta/reunião), com copiar, editar, duplicar, excluir e reordenar.
 - **Variáveis:** `{{empresa}} {{contato}} {{cidade}} {{segmento}} {{site}} {{nome_vendedor}} {{valor_site}} {{valor_manutencao}} {{prazo}} {{data}} {{horario}} {{data_horario_1}} {{data_horario_2}} {{mensagem_personalizada}}`. Campos vazios são retirados da mensagem sem quebrar o texto.
+- **Vendas e lucro:** faturamento, custos, lucro, margem, valores a receber, mensalidades (receita recorrente) e despesas, com gráfico mensal. Ao marcar um lead como "Fechado", o CRM abre o registro da venda.
 - O progresso fica salvo no navegador (localStorage). Faça backup em "Ajustes".
 
 ## Extensão do Chrome (CRM ao lado do WhatsApp Web)

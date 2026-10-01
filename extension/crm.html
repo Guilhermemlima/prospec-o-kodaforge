@@ -9,21 +9,21 @@
   --bg:#f6f7f9;--panel:#fff;--panel2:#f1f3f6;--line:#e3e6eb;--text:#1b1f24;--muted:#667080;
   --accent:#1f7a5a;--accent-ink:#fff;--accent-soft:#e3f2ec;--wa:#1faa59;
   --red:#c2413a;--red-soft:#fbe9e7;--amber:#a86a00;--amber-soft:#fdf1d8;--blue:#2f5fb3;--blue-soft:#e6eefb;
-  --purple:#7a46b8;--purple-soft:#f1e9fb;
+  --purple:#7a46b8;--purple-soft:#f1e9fb;--s1:#2a78d6;--s2:#1baf7a;
   --shadow:0 8px 30px rgba(20,30,40,.12);
 }
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
   --bg:#111418;--panel:#181c21;--panel2:#20252c;--line:#2b313a;--text:#e7eaee;--muted:#98a2b0;
   --accent:#3fb58a;--accent-ink:#0c1a14;--accent-soft:#17362b;--wa:#2bc46b;
   --red:#ef7a70;--red-soft:#3a1f1d;--amber:#e6b04a;--amber-soft:#3a2d12;--blue:#7ea6ef;--blue-soft:#1c2940;
-  --purple:#b892ec;--purple-soft:#2c2140;
+  --purple:#b892ec;--purple-soft:#2c2140;--s1:#3987e5;--s2:#199e70;
   --shadow:0 8px 30px rgba(0,0,0,.5);
 }}
 :root[data-theme="dark"]{
   --bg:#111418;--panel:#181c21;--panel2:#20252c;--line:#2b313a;--text:#e7eaee;--muted:#98a2b0;
   --accent:#3fb58a;--accent-ink:#0c1a14;--accent-soft:#17362b;--wa:#2bc46b;
   --red:#ef7a70;--red-soft:#3a1f1d;--amber:#e6b04a;--amber-soft:#3a2d12;--blue:#7ea6ef;--blue-soft:#1c2940;
-  --purple:#b892ec;--purple-soft:#2c2140;
+  --purple:#b892ec;--purple-soft:#2c2140;--s1:#3987e5;--s2:#199e70;
   --shadow:0 8px 30px rgba(0,0,0,.5);
 }
 *{box-sizing:border-box}
@@ -168,6 +168,29 @@ h4{margin:18px 0 8px;font-size:13px;color:var(--muted);text-transform:uppercase;
 .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%) translateY(120px);background:var(--text);color:var(--bg);padding:10px 14px;border-radius:10px;display:flex;gap:12px;align-items:center;transition:.2s;z-index:40;box-shadow:var(--shadow);max-width:calc(100vw - 32px)}
 .toast.on{transform:translateX(-50%)}
 .toast button{background:transparent;border:1px solid currentColor;color:inherit;border-radius:7px;padding:3px 9px;cursor:pointer;font-weight:600;white-space:nowrap}
+/* vendas */
+.finbar{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:8px}
+.seg{display:flex;flex-wrap:wrap;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:3px;gap:2px}
+.seg button{border:0;background:transparent;border-radius:7px;padding:5px 10px;font-size:13px;font-weight:600;color:var(--muted);cursor:pointer}
+.seg button.on{background:var(--text);color:var(--bg)}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px}
+.kpi{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px 14px}
+.kpi span{display:block;font-size:12px;color:var(--muted);font-weight:600}
+.kpi b{display:block;font-size:24px;margin:2px 0;font-variant-numeric:tabular-nums;letter-spacing:-.01em}
+.kpi small{color:var(--muted);font-size:12px}
+.kpi.pos b{color:var(--accent)} .kpi.neg b{color:var(--red)}
+.lg{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);margin-right:6px}
+.lg i,.tip i{display:inline-block;width:10px;height:10px;border-radius:3px}
+.ax{font-size:11px;fill:var(--muted);font-variant-numeric:tabular-nums}
+.tip{position:absolute;background:var(--panel);border:1px solid var(--line);box-shadow:var(--shadow);border-radius:10px;padding:8px 10px;font-size:12px;min-width:190px;pointer-events:none}
+.tip div{display:flex;align-items:center;gap:6px;margin-top:3px}
+.tip span{margin-left:auto;font-weight:600;font-variant-numeric:tabular-nums}
+.tip .mut{color:var(--muted)}
+table.ft{min-width:640px}
+table.ft th{cursor:default}
+table.ft td.r,table.ft th.r{text-align:right}
+table.ft tbody tr{cursor:default}
+table.ft a{color:var(--accent);font-weight:600;text-decoration:none}
 /* painel lateral (extensão do Chrome) */
 body.panel{font-size:13px}
 body.panel header,body.panel main,body.panel .overlay,body.panel #prev,body.panel #next{display:none}
@@ -201,6 +224,7 @@ body.panel .x#close{font-size:14px;width:auto;padding:0 10px}
       <button data-v="hoje">Hoje<span class="n hidden" id="dueN"></span></button>
       <button data-v="lista" class="on">Leads</button>
       <button data-v="funil">Funil</button>
+      <button data-v="vendas">Vendas e lucro</button>
       <button data-v="modelos">Modelos de mensagem</button>
       <button data-v="config">Ajustes</button>
     </nav>
@@ -235,6 +259,7 @@ body.panel .x#close{font-size:14px;width:auto;padding:0 10px}
     <div class="kanban" id="kanban"></div>
   </section>
   <section id="v-hoje" class="hidden"><div class="today" id="today"></div></section>
+  <section id="v-vendas" class="hidden"><div id="vendas"></div></section>
   <section id="v-modelos" class="hidden"><div class="cfg" id="modelos"></div></section>
   <section id="v-config" class="hidden"><div class="cfg" id="cfg"></div></section>
 </main>
