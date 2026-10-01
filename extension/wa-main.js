@@ -1,6 +1,8 @@
 // Roda no contexto da página do WhatsApp Web, junto com a biblioteca WPPConnect (vendor/wppconnect-wa.js).
 // Abre a conversa sem recarregar a página e coloca o texto na caixa de mensagem. Nunca envia nada.
 (() => {
+  if (window.__kodaMain) return; // já instalado nesta aba
+  window.__kodaMain = true;
   const ready = () => new Promise(res => {
     if (window.WPP?.isFullReady) return res(true);
     const t = setInterval(() => { if (window.WPP?.isFullReady) { clearInterval(t); res(true); } }, 200);

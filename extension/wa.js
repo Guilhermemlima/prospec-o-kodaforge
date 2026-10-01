@@ -99,6 +99,7 @@
   }
 
   chrome.runtime.onMessage.addListener((msg, _sender, reply) => {
+    if (msg?.type === 'koda-ping') { reply({ ok: true }); return; }
     if (msg?.type === 'koda-get') { reply(snapshot()); return; }
     if (msg?.type === 'koda-insert') { insertText(msg.text, reply); return true; }
     if (msg?.type === 'koda-open') { openChat(msg.phone, msg.text, reply); return true; }

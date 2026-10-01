@@ -1,10 +1,11 @@
 {
   "manifest_version": 3,
   "name": "Koda Forge CRM",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "CRM de prospecção da Koda Forge num painel ao lado do WhatsApp Web.",
   "permissions": [
-    "sidePanel"
+    "sidePanel",
+    "scripting"
   ],
   "host_permissions": [
     "https://web.whatsapp.com/*"
@@ -39,6 +40,16 @@
       ],
       "run_at": "document_idle",
       "world": "MAIN"
+    },
+    {
+      "matches": [
+        "https://*.vercel.app/*",
+        "file:///*"
+      ],
+      "js": [
+        "crm-bridge.js"
+      ],
+      "run_at": "document_idle"
     }
   ],
   "icons": {

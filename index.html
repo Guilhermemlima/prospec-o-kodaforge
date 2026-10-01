@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="koda-crm" content="1">
 <title>CRM Koda Forge</title>
 <style>
 :root{
@@ -789,7 +790,7 @@ function drawerHTML(l){
   const missing = t ? usedVars(t.conteudo).filter(k=>!String(vals[k]??'').trim()) : [];
   const after = t ? statusAfterSend(l.s.status, t.etapa) : l.s.status;
   const envios = l.s.hist.filter(h=>h.tipo==='envio');
-  const inChat = EXT && wa.leadId===l.id;
+  const inChat = EXT && st.cfg.modo!=='app' && wa.leadId===l.id;
   const replied = inChat && wa.info?.incoming && !['respondeu','negociando','fechado'].includes(l.s.status);
   return `
   <div class="dh">
@@ -836,7 +837,7 @@ function drawerHTML(l){
         ${inChat?'':`<button class="btn sm" id="openOnly" ${ph?'':'disabled'}>Só abrir conversa</button>`}
         <button class="btn sm" id="editTpl">Editar modelo</button>
       </div>
-      <div class="hint">${inChat?'O texto vai para a caixa de mensagem da conversa aberta':EXT?'Abre a conversa na aba do WhatsApp Web com o texto pronto':'Abre o '+(st.cfg.modo==='app'?'WhatsApp Desktop':'WhatsApp Web')+' com o texto pronto'}: confira e aperte Enter.
+      <div class="hint">${st.cfg.modo==='app'?'Abre o WhatsApp Desktop com o texto pronto':inChat?'O texto vai para a caixa de mensagem da conversa aberta':EXT||document.documentElement.dataset.kodaBridge?'Abre a conversa na aba do WhatsApp Web com o texto pronto':'Abre o WhatsApp Web com o texto pronto'}: confira e aperte Enter.
         ${after!==l.s.status?` Ao enviar, o lead vai para <b>${SL[after]}</b> e a próxima ação fica para daqui a ${CL[t.etapa].days} dias.`:' Ao enviar, o envio fica registrado no histórico.'}</div>` : ''}
     </div>
 
@@ -909,12 +910,28 @@ function setStatus(l,k){
   if(k==='fechado') promptSale(l);
 }
 function openWA(l,text){
-  if(EXT) return extOpenWA(l,text);
   const ph=phone(l), t=encodeURIComponent(text);
-  if(st.cfg.modo==='app') location.href=`whatsapp://send?phone=${ph}&text=${t}`;
-  else if(st.cfg.modo==='wame') window.open(`https://wa.me/${ph}?text=${t}`,'kodaforge_wa');
+  if(st.cfg.modo==='app'){
+    if(!ph){ copyText(text); toast('Lead sem telefone. Texto copiado.'); return {ok:false, reason:'no-phone'}; }
+    // abre o app do WhatsApp no Windows com a conversa e o texto prontos (nenhuma aba é aberta)
+    const a=document.createElement('a'); a.href=`whatsapp://send?phone=${ph}&text=${t}`; document.body.appendChild(a); a.click(); a.remove();
+    return {ok:true};
+  }
+  if(EXT) return extOpenWA(l,text);
+  // site com a extensão instalada: a extensão reaproveita a aba do WhatsApp Web
+  if(document.documentElement.dataset.kodaBridge && st.cfg.modo==='web') return bridgeOpen(ph,text);
+  if(st.cfg.modo==='wame') window.open(`https://wa.me/${ph}?text=${t}`,'kodaforge_wa');
   else window.open(`https://web.whatsapp.com/send?phone=${ph}&text=${t}`,'kodaforge_wa');
   return {ok:true};
+}
+function bridgeOpen(ph,text){
+  return new Promise(res=>{
+    const id=Math.random().toString(36).slice(2);
+    const on=e=>{ if(e.source!==window || e.data?.src!=='koda-bridge' || e.data.id!==id) return; window.removeEventListener('message',on); res(e.data); };
+    window.addEventListener('message',on);
+    window.postMessage({src:'koda-page', type:'open', id, phone:ph, text},'*');
+    setTimeout(()=>{ window.removeEventListener('message',on); res({ok:false, reason:'timeout'}); },30000);
+  });
 }
 function registerSend(l,t,text,advance){
   const snap=snapshot(l), from=l.s.status, to=statusAfterSend(from,t.etapa);
@@ -1160,11 +1177,12 @@ function renderCfg(){
         <div><label>Meta fixa/mês</label><input data-camp="${i}:metaFixa" value="${String(k.metaFixa).replace('.',',')}" inputmode="decimal"></div>
         <button class="btn xs danger" data-campdel="${i}" title="Remover campanha">×</button></div>`).join('')}
       <button class="btn xs" id="campAdd">+ Campanha</button></div>
-    <div class="box"><h3>Como abrir o WhatsApp</h3><p class="sub">${EXT?'Na extensão, o CRM usa sempre a aba do WhatsApp Web. ':''}Todas usam o seu número. Nada é enviado sem você apertar Enter na conversa.</p>
-      <div class="radio ${EXT?'hidden':''}">
-        <label><input type="radio" name="modo" value="web" ${m==='web'?'checked':''}> WhatsApp Web (reaproveita a mesma aba)</label>
+    <div class="box"><h3>Como abrir o WhatsApp</h3><p class="sub">Todas usam o seu número. Nada é enviado sem você apertar Enter na conversa.</p>
+      ${m==='app'?`<div class="warn" style="margin-bottom:10px">No modo Desktop, o painel lateral não consegue ler as conversas (isso só funciona no WhatsApp Web). Os envios continuam sendo registrados normalmente.</div>`:''}
+      <div class="radio">
+        <label><input type="radio" name="modo" value="web" ${m==='web'?'checked':''}> WhatsApp Web ${EXT||document.documentElement.dataset.kodaBridge?'(abre na aba já aberta, sem recarregar)':'(instale a extensão para não abrir abas novas)'}</label>
         <label><input type="radio" name="modo" value="app" ${m==='app'?'checked':''}> WhatsApp Desktop (app do Windows)</label>
-        <label><input type="radio" name="modo" value="wame" ${m==='wame'?'checked':''}> Link wa.me (celular)</label>
+        ${EXT?'':`<label><input type="radio" name="modo" value="wame" ${m==='wame'?'checked':''}> Link wa.me (celular)</label>`}
       </div>
       <div class="grid2" style="margin-top:14px">
         <div><label>Limite de envios por dia</label><input type="number" id="meta" min="1" value="${c.meta}"></div>
@@ -1190,7 +1208,9 @@ function renderCfg(){
   });
   document.querySelectorAll('[data-campdel]').forEach(b=>b.onclick=()=>{ const i=+b.dataset.campdel, c=st.campanhas[i]; if(!confirm(`Remover a campanha "${c.nome}"?`)) return; st.campanhas.splice(i,1); save(); renderCfg(); toast('Campanha removida','Desfazer',()=>{ st.campanhas.splice(i,0,c); save(); renderCfg(); }); });
   $('#campAdd').onclick=()=>{ st.campanhas.push({id:uid(), nome:'Nova campanha', inicio:today(), fim:addDays(30), metaClientes:0, metaVendido:0, metaFixa:0}); save(); renderCfg(); };
-  document.querySelectorAll('[name=modo]').forEach(r=>r.onchange=()=>{ st.cfg.modo=r.value; save(); });
+  document.querySelectorAll('[name=modo]').forEach(r=>r.onchange=()=>{ st.cfg.modo=r.value; save(); renderCfg();
+    if(r.value==='app') toast('Na primeira vez, o Chrome pergunta se pode abrir o WhatsApp: marque "Sempre permitir" e clique em Abrir.'); });
+  if(st.cfg.modo==='wame' && EXT){ st.cfg.modo='web'; save(); }
   $('#meta').onchange=e=>{ st.cfg.meta=Math.max(1,+e.target.value||25); save(); renderStats(); };
   $('#avancar').onchange=e=>{ st.cfg.avancar=e.target.value==='1'; save(); };
   $('#bkp').onclick=()=>download(`crm-kodaforge-backup-${today()}.json`, JSON.stringify(st,null,1), 'application/json');
@@ -1476,28 +1496,17 @@ async function waTab(){
   return tabs.find(t=>t.id===wa.tabId) || tabs.find(t=>t.active) || tabs[0] || null;
 }
 async function extOpenWA(l,text){
-  const url=`https://web.whatsapp.com/send?phone=${phone(l)}&text=${encodeURIComponent(text)}`;
-  const tab=await waTab();
-  if(wa.leadId===l.id && tab){
-    try{
-      const r=await chrome.tabs.sendMessage(tab.id,{type:'koda-insert', text});
-      if(r?.ok){ if(!PANEL){ chrome.tabs.update(tab.id,{active:true}); chrome.windows.update(tab.windowId,{focused:true}); } return {ok:true}; }
-    }catch(e){}
+  const ask = m => chrome.runtime.sendMessage({type:'koda-wa-open', focus:!PANEL, ...m}).catch(()=>({ok:false}));
+  if(wa.leadId===l.id && wa.tabId){
+    const r = await ask({insertOnly:true, text});
+    if(r?.ok) return {ok:true};
     copyText(text); toast('Não consegui colocar o texto na conversa. Ele foi copiado: cole com Ctrl+V.'); return {ok:true};
   }
   if(!phone(l)){ copyText(text); toast('Lead sem telefone. Texto copiado.'); return {ok:false, reason:'no-phone'}; }
-  if(!tab){ chrome.tabs.create({url}); return {ok:true}; }
-  // caminho rápido: abre a conversa por dentro do WhatsApp Web, sem recarregar a página
   wa.expect = {id:l.id, until:Date.now()+15000};
-  try{
-    const r = await chrome.tabs.sendMessage(tab.id,{type:'koda-open', phone:phone(l), text});
-    if(r?.ok){ if(!PANEL){ chrome.tabs.update(tab.id,{active:true}); chrome.windows.update(tab.windowId,{focused:true}); } return {ok:true}; }
-    if(r?.reason==='no-whatsapp'){ wa.expect=null; return r; }
-  }catch(e){}
-  // plano B: abre pelo link (a página do WhatsApp Web recarrega)
-  await chrome.tabs.update(tab.id,{url, active:true});
-  chrome.windows.update(tab.windowId,{focused:true});
-  return {ok:true};
+  const r = await ask({phone:phone(l), text});
+  if(r?.reason==='no-whatsapp') wa.expect=null;
+  return r?.reason==='no-whatsapp' ? r : {ok:true};
 }
 function onWaUpdate(msg){
   wa.info=msg.info||null; wa.chats=msg.chats||[];
