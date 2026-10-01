@@ -65,18 +65,7 @@ async function checkNumber({ phone }) {
   catch (e) { return { ok: false, reason: 'no-scripts' }; }
 }
 
-// Abre o WhatsApp Desktop (link whatsapp://). Páginas da extensão não conseguem abrir apps sozinhas,
-// então o link é aberto na aba atual: o Chrome mostra "Abrir WhatsApp?" e a página continua onde estava.
-async function openProtocol({ url }, sender) {
-  if (!/^whatsapp:\/\/send\?phone=\d+(&text=[^\s]*)?$/.test(String(url))) return { ok: false, reason: 'bad-url' };
-  let tabId = sender.tab?.id;
-  if (!tabId) { const [t] = await chrome.tabs.query({ active: true, lastFocusedWindow: true }); tabId = t?.id; }
-  try { if (tabId) { await chrome.tabs.update(tabId, { url }); return { ok: true }; } } catch (e) {}
-  await chrome.tabs.create({ url });
-  return { ok: true };
-}
-
-const HANDLERS = { 'koda-wa-open': openInWhatsApp, 'koda-wa-check': checkNumber, 'koda-protocol': openProtocol };
+const HANDLERS = { 'koda-wa-open': openInWhatsApp, 'koda-wa-check': checkNumber };
 chrome.runtime.onMessage.addListener((msg, sender, reply) => {
   const h = HANDLERS[msg?.type];
   if (!h) return;

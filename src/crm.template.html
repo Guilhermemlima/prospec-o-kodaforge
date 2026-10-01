@@ -246,9 +246,15 @@ body.panel .x#close{font-size:14px;width:auto;padding:0 10px}
       <select id="fStatus"><option value="">Todos os status</option></select>
       <select id="fPrio"><option value="">Toda prioridade</option><option>Alta</option><option>Média</option><option>Baixa</option></select>
       <select id="fNicho"><option value="">Todos os nichos</option></select>
+      <select id="fCat"><option value="">Todas as categorias</option></select>
+      <select id="fBairro"><option value="">Todos os bairros</option></select>
+      <select id="fNota"><option value="">Qualquer nota</option><option value="4.8">Nota 4,8+</option><option value="4.5">Nota 4,5+</option><option value="4">Nota 4,0+</option></select>
+      <select id="fAval"><option value="">Qualquer nº de avaliações</option><option value="500">500+ avaliações</option><option value="200">200+ avaliações</option><option value="50">50+ avaliações</option></select>
+      <select id="fSit"><option value="">Qualquer situação</option><option value="nunca">Nunca contatados</option><option value="contatados">Já contatados</option><option value="semresp">Contatados sem resposta</option><option value="conversando">Em conversa (respondeu/proposta)</option></select>
       <select id="fPres"><option value="">Toda presença</option><option value="A">A · Sem site</option><option value="B">B · Só rede social</option><option value="C">C · Site improvisado</option></select>
       <select id="fCanal" class="hidden"><option value="">Todos</option><option value="wa">WhatsApp</option><option value="ligar">Ligar</option></select>
       <label class="chk"><input type="checkbox" id="fDue"> Só ações vencidas</label>
+      <button class="btn xs" id="fClear">Limpar filtros</button>
       <span class="count" id="count"></span>
     </div>
     <div class="tablewrap">
@@ -734,13 +740,28 @@ let sortK='pts', sortDir=-1, current=null, visible=[];
 $('#fStatus').innerHTML += STAGES.map(s=>`<option value="${s.k}">${s.l}</option>`).join('');
 try{ const c=sessionStorage.getItem(KEY+'-canal'); $('#fCanal').value = c===null ? 'wa' : c; }catch(e){ $('#fCanal').value='wa'; }
 $('#fNicho').innerHTML += [...new Set(leads.map(l=>l.nicho))].sort().map(n=>`<option>${esc(n)}</option>`).join('');
-['q','fStatus','fPrio','fNicho','fPres','fCanal','fDue'].forEach(id=>$('#'+id).addEventListener('input',renderList));
+const countBy = k => Object.entries(leads.reduce((m,l)=>{ const v=l[k]||'—'; m[v]=(m[v]||0)+1; return m; },{})).sort((a,b)=>a[0].localeCompare(b[0],'pt'));
+$('#fCat').innerHTML += countBy('cat').map(([v,n])=>`<option value="${esc(v)}">${esc(v)} (${n})</option>`).join('');
+$('#fBairro').innerHTML += countBy('bairro').map(([v,n])=>`<option value="${esc(v)}">${esc(v)} (${n})</option>`).join('');
+const FILTERS=['q','fStatus','fPrio','fNicho','fCat','fBairro','fNota','fAval','fSit','fPres','fCanal','fDue'];
+FILTERS.forEach(id=>$('#'+id).addEventListener('input',()=>{ saveFilters(); renderList(); }));
+function saveFilters(){ try{ sessionStorage.setItem(KEY+'-filtros', JSON.stringify(Object.fromEntries(FILTERS.map(id=>[id, $('#'+id).type==='checkbox'?$('#'+id).checked:$('#'+id).value])))); }catch(e){} }
+function clearFilters(keepCanal){ FILTERS.forEach(id=>{ if(keepCanal && id==='fCanal') return; const e=$('#'+id); if(e.type==='checkbox') e.checked=false; else e.value=''; }); saveFilters(); }
+try{ const f=JSON.parse(sessionStorage.getItem(KEY+'-filtros')||'null'); if(f) FILTERS.forEach(id=>{ if(!(id in f)) return; const e=$('#'+id); if(e.type==='checkbox') e.checked=f[id]; else e.value=f[id]; }); }catch(e){}
+$('#fClear').onclick=()=>{ clearFilters(true); renderList(); };
+const situacao = l => { const env=l.s.hist.some(h=>h.tipo==='envio'||h.tipo==='ligacao');
+  if(['respondeu','negociando','fechado'].includes(l.s.status)) return 'conversando';
+  if(l.s.status==='a_contatar' && !env) return 'nunca';
+  return 'semresp'; };
 document.querySelectorAll('th[data-s]').forEach(th=>th.onclick=()=>{ const k=th.dataset.s; sortDir = sortK===k ? -sortDir : (k==='emp'||k==='bairro'?1:-1); sortK=k; renderList(); });
 const norm = s => (s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase();
 function filtered(){
+  const fcat=$('#fCat').value, fb=$('#fBairro').value, fnota=+$('#fNota').value||0, faval=+$('#fAval').value||0, fsit=$('#fSit').value;
   const qn=norm($('#q').value.trim()), fs=$('#fStatus').value, fp=$('#fPrio').value, fn=$('#fNicho').value, fr=$('#fPres').value, fc=$('#fCanal').value, fd=$('#fDue').checked;
   const r = leads.filter(l =>
     (!qn || norm([l.emp,l.cat,l.bairro,l.tel,l.nicho,l.s.contato].join(' ')).includes(qn)) &&
+    (!fcat || l.cat===fcat) && (!fb || (l.bairro||'—')===fb) && (!fnota || (l.nota||0)>=fnota) && (!faval || (l.aval||0)>=faval) &&
+    (!fsit || (fsit==='contatados' ? situacao(l)!=='nunca' : situacao(l)===fsit)) &&
     (!fs || l.s.status===fs) && (!fp || l.prio===fp) && (!fn || l.nicho===fn) && (!fr || presKey(l)===fr) &&
     (!fc || (fc==='wa' ? canWA(l) : !canWA(l))) && (!fd || isDue(l)));
   const val = l => sortK==='status' ? STAGES.findIndex(s=>s.k===l.s.status) : sortK==='prox' ? (l.s.prox||'9999') : sortK==='pts' ? l.pts*100000+(l.aval||0) : l[sortK];
@@ -1040,8 +1061,9 @@ function openWA(l,text){
     if(!ph){ copyText(text); toast('Lead sem telefone. Texto copiado.'); return {ok:false, reason:'no-phone'}; }
     // abre o app do WhatsApp no Windows com a conversa e o texto prontos (nenhuma aba é aberta)
     const url=`whatsapp://send?phone=${ph}&text=${t}`;
-    if(canAskExt()){ extAsk({type:'koda-protocol', url}); return {ok:true}; }
-    const a=document.createElement('a'); a.href=url; document.body.appendChild(a); a.click(); a.remove();
+    // o painel lateral não é uma aba: abre uma janela que o Chrome fecha sozinho depois de chamar o app
+    if(PANEL) window.open(url,'_blank');
+    else { const a=document.createElement('a'); a.href=url; document.body.appendChild(a); a.click(); a.remove(); }
     return {ok:true};
   }
   if(EXT) return extOpenWA(l,text);
@@ -1267,9 +1289,9 @@ function renderHoje(){
       ${ligar.length?`<button class="btn sm" id="goLigar" style="margin-top:8px">Ver lista de ligações →</button>`:''}</div>`;
   document.querySelectorAll('#today .li').forEach(e=>e.onclick=()=>openLead(+e.dataset.id));
   bindChecklist(renderHoje);
-  if($('#goLigar')) $('#goLigar').onclick=()=>{ ['q','fPrio','fNicho','fPres'].forEach(id=>$('#'+id).value=''); $('#fDue').checked=false; $('#fStatus').value='a_contatar'; $('#fCanal').value='ligar'; show('lista'); renderList(); };
+  if($('#goLigar')) $('#goLigar').onclick=()=>{ clearFilters(); $('#fStatus').value='a_contatar'; $('#fCanal').value='ligar'; saveFilters(); show('lista'); renderList(); };
   const b=$('#startSeq'); if(b) b.onclick=()=>{
-    ['q','fStatus','fPrio','fNicho','fPres','fDue'].forEach(id=>{ const e=$('#'+id); if(e.type==='checkbox') e.checked=false; else e.value=''; });
+    clearFilters();
     $('#fStatus').value='a_contatar'; $('#fCanal').value='wa'; sortK='pts'; sortDir=-1;
     show('lista'); renderList(); if(visible[0]) openLead(visible[0].id);
   };
@@ -1584,8 +1606,11 @@ window.addEventListener('storage',e=>{ if(e.key===KEY){ st=load(); refresh(); } 
 /* ---------- fila de envio (painel lateral) ---------- */
 // follow-ups vencidos primeiro, depois leads novos com WhatsApp, por prioridade
 let queue=null, qi=0;
+let queueSeg=''; // '' = todos · 'n:<nicho>' · 'c:<categoria>'
+try{ queueSeg=sessionStorage.getItem(KEY+'-fila')||''; }catch(e){}
+const inSeg = l => !queueSeg || (queueSeg.startsWith('n:') ? l.nicho===queueSeg.slice(2) : l.cat===queueSeg.slice(2));
 function buildQueue(){
-  const ok = l => canWA(l);
+  const ok = l => canWA(l) && inSeg(l);
   const due = leads.filter(l=>isDue(l) && ok(l) && SEQ.includes(l.s.status)).sort((a,b)=>(a.s.prox>b.s.prox?1:-1));
   const novos = leads.filter(l=>l.s.status==='a_contatar' && ok(l)).sort((a,b)=>b.pts-a.pts || (b.aval||0)-(a.aval||0));
   return [...due, ...novos].map(l=>l.id);
@@ -1686,6 +1711,11 @@ function renderPanelHome(){
     <div class="box"><h3>Novas mensagens de leads</h3><p class="sub">${unread.length?'Conversas não lidas que são de leads':'Nenhuma conversa não lida de lead na lista do WhatsApp.'}</p>
       ${unread.map(l=>item(l, ['respondeu','negociando','fechado'].includes(l.s.status)?'':`<button class="btn xs" data-resp="${l.id}">Respondeu</button>`)).join('')}</div>
     ${(()=>{ const n=buildQueue().length; return `<div class="box"><h3>Fila de envio</h3><p class="sub">${n?`${n} leads: follow-ups do dia primeiro, depois novos contatos por prioridade. Clique em Enviar no painel, aperte Enter no WhatsApp e o próximo já aparece.`:'Nenhum lead para enviar agora.'}</p>
+      <select class="inp" id="pSeg" style="width:100%;margin-bottom:8px">
+        <option value="">Todos os segmentos</option>
+        <optgroup label="Nicho">${[...new Set(leads.map(l=>l.nicho))].sort().map(v=>`<option value="n:${esc(v)}" ${queueSeg==='n:'+v?'selected':''}>${esc(v)}</option>`).join('')}</optgroup>
+        <optgroup label="Categoria">${[...new Set(leads.map(l=>l.cat))].sort((a,b)=>a.localeCompare(b,'pt')).map(v=>`<option value="c:${esc(v)}" ${queueSeg==='c:'+v?'selected':''}>${esc(v)}</option>`).join('')}</optgroup>
+      </select>
       <div class="row"><button class="btn pri" id="pQueue" ${n?'':'disabled'}>Começar fila →</button><small class="hint" style="margin:0">Hoje: ${sentToday()} de ${st.cfg.meta}</small></div></div>`; })()}
     <div class="box"><h3>Ações para hoje</h3><p class="sub">${due.length?'Leads esperando o próximo passo':'Nada vencido. 👌'}</p>${due.map(l=>item(l,`<span class="due">${br(l.s.prox)}</span>`)).join('')}</div>
     <div class="box"><h3>Buscar lead</h3><input class="inp" id="pQ" placeholder="Empresa, categoria, bairro…" autocomplete="off" style="width:100%"><div id="pR"></div></div>`;
@@ -1693,6 +1723,7 @@ function renderPanelHome(){
   bindItems($('#panelHome'));
   $('#panelHome').querySelectorAll('[data-resp]').forEach(b=>b.onclick=()=>{ setStatus(byId[b.dataset.resp],'respondeu'); renderPanelHome(); });
   if($('#pQueue')) $('#pQueue').onclick=startQueue;
+  if($('#pSeg')) $('#pSeg').onchange=e=>{ queueSeg=e.target.value; try{ sessionStorage.setItem(KEY+'-fila',queueSeg); }catch(_){} renderPanelHome(); };
   if($('#pOpenWA')) $('#pOpenWA').onclick=()=>chrome.tabs.create({url:'https://web.whatsapp.com/'});
   const search = q => { const n=norm(q.trim()); return n.length<2?[]:leads.filter(l=>norm([l.emp,l.cat,l.bairro,l.s.contato].join(' ')).includes(n)).slice(0,8); };
   $('#pQ').oninput=e=>{ $('#pR').innerHTML=search(e.target.value).map(l=>item(l)).join(''); bindItems($('#pR')); };

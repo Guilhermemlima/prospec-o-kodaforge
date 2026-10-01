@@ -1,8 +1,8 @@
 // Liga o CRM aberto pelo site (Vercel) ou pelo arquivo à extensão: abre conversas na aba do WhatsApp Web
-// que já existe, abre o WhatsApp Desktop e confere números. Só age em páginas do CRM (<meta name="koda-crm">).
+// que já existe e confere números. Só age em páginas do CRM (<meta name="koda-crm">).
 (() => {
   if (!document.querySelector('meta[name="koda-crm"]')) return;
-  const ALLOWED = ['koda-wa-open', 'koda-wa-check', 'koda-protocol'];
+  const ALLOWED = ['koda-wa-open', 'koda-wa-check'];
   document.documentElement.dataset.kodaBridge = '1';
   window.addEventListener('message', e => {
     if (e.source !== window || e.data?.src !== 'koda-page' || !ALLOWED.includes(e.data.msg?.type)) return;
