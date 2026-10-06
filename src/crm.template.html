@@ -500,7 +500,7 @@ Posso te mostrar como ficaria o site da {{empresa}}?`},
   {id:'c_reativa', etapa:'enviada', pos:'start', ...BLACK, reat:true, nome:'Black: reativação (conversou em outubro)', conteudo:`Oi, {{contato}}! Lembra que a gente falou do site da {{empresa}}?
 Na Black ficou mais leve: dá pra começar com R$ 247 e o resto vira uma mensalidade fixa.
 Faz mais sentido assim?`},
-  {id:'n_analise', etapa:'enviada', pos:'start', nome:'Análise gratuita da presença online', conteudo:`Olá, tudo bem? 👋
+  {id:'n_analise', etapa:'enviada', pos:'top', nome:'Análise gratuita da presença online', conteudo:`Olá, tudo bem? 👋
 
 Sou da Koda Forge, trabalhamos com criação e reestruturação de sites para empresas.
 
@@ -553,7 +553,8 @@ function insertTpl(list, c){
   const t={...c}; delete t.pos;
   const same = list.filter(x=>x.etapa===t.etapa);
   let at;
-  if(c.pos==='start'){ const first = same.find(x=>V1_IDS.includes(x.id)); at = first ? list.indexOf(first) : -1; }
+  if(c.pos==='top'){ const first = same[0]; at = first ? list.indexOf(first) : -1; }
+  else if(c.pos==='start'){ const first = same.find(x=>V1_IDS.includes(x.id)); at = first ? list.indexOf(first) : -1; }
   else if(c.pos!=='end'){ const ref = list.find(x=>x.id===c.pos); at = ref ? list.indexOf(ref) : -1; }
   if(at===undefined || at<0){ const last = same.at(-1); at = last ? list.indexOf(last)+1 : list.length; }
   list.splice(at, 0, t);
@@ -590,6 +591,11 @@ function load(){
   if(!Array.isArray(s.templates)) s.templates = DEFAULT_TEMPLATES.filter(t=>V1_IDS.includes(t.id)).map(t=>({...t}));
   s.tplSeen ||= [...V1_IDS];
   for(const c of CAMPAIGN_TEMPLATES) if(!s.tplSeen.includes(c.id)){ insertTpl(s.templates, c); s.tplSeen.push(c.id); }
+  if(!s.analiseTopo){
+    const t=s.templates.find(x=>x.id==='n_analise');
+    if(t){ s.templates.splice(s.templates.indexOf(t),1); const first=s.templates.find(x=>x.etapa==='enviada'); s.templates.splice(first?s.templates.indexOf(first):s.templates.length,0,t); }
+    s.analiseTopo=true;
+  }
   s.campanhas ||= DEFAULT_CAMPAIGNS.map(c=>({...c}));
   s.checklist ||= DEFAULT_CHECKLIST.map(c=>({...c}));
   delete s.tpl; // formato antigo
@@ -803,7 +809,7 @@ let selCat=null, selTpl=null;
 function defaultTpl(l, cat){
   const list = tplsOf(cat); if(!list.length) return null;
   const act = list.filter(t=>tplActive(t));
-  const pick = arr => (arr.find(t=>t.nicho===l.nicho) || arr.find(t=>!t.nicho))?.id;
+  const pick = arr => arr[0]?.id;
   // depois de "Posso te enviar?" no follow-up 2, quem responde geralmente quer os valores
   if(cat==='respondeu'){
     const last=[...l.s.hist].reverse().find(h=>h.tipo==='envio');
