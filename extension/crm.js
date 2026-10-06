@@ -213,6 +213,15 @@ Posso te mostrar como ficaria o site da {{empresa}}?`},
   {id:'c_reativa', etapa:'enviada', pos:'start', ...BLACK, reat:true, nome:'Black: reativação (conversou em outubro)', conteudo:`Oi, {{contato}}! Lembra que a gente falou do site da {{empresa}}?
 Na Black ficou mais leve: dá pra começar com R$ 247 e o resto vira uma mensalidade fixa.
 Faz mais sentido assim?`},
+  {id:'n_analise', etapa:'enviada', pos:'start', nome:'Análise gratuita da presença online', conteudo:`Olá, tudo bem? 👋
+
+Sou da Koda Forge, trabalhamos com criação e reestruturação de sites para empresas.
+
+Encontrei a {{empresa}} e fiquei com uma dúvida: hoje vocês possuem um site próprio onde o cliente consegue conhecer os serviços, encontrar as informações da empresa e entrar em contato facilmente?
+
+Pergunto porque encontramos muitas empresas boas que acabam perdendo oportunidades por não terem uma presença digital à altura do negócio.
+
+Se quiser, posso fazer uma análise rápida e gratuita da presença online de vocês e mostrar o que poderia ser melhorado. Posso te enviar?`},
   {id:'c_fu_portfolio', etapa:'fu1', pos:'start', nome:'Portfólio (D+2)', conteudo:`{{contato}}, conseguiu ver? Te mando um site que fiz pra um negócio parecido com o seu: {{portfolio}}`},
   {id:'c_fu_vagas', etapa:'fu2', pos:'start', ...OUT, nome:'Vagas de Parceiro Koda (D+5)', conteudo:`{{contato}}, das 3 vagas de Parceiro Koda, já foram {{parceiros_fechados}}. Seguro uma pra {{empresa}}?`},
   {id:'c_fu_black', etapa:'fu2', pos:'start', ...BLACK, nome:'Black: faltam X dias (D+5)', conteudo:`{{contato}}, faltam {{dias_restantes}} dias pra acabar a Black. Seguro a condição pra {{empresa}}?`},
