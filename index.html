@@ -600,7 +600,8 @@ function load(){
   s.checklist ||= DEFAULT_CHECKLIST.map(c=>({...c}));
   delete s.tpl; // formato antigo
   s.fin = Object.assign({vendas:[], mensais:[], despesas:[]}, s.fin||{});
-  s.cfg = Object.assign({modo:'web', meta:25, avancar:true, nome_vendedor:'Guilherme', cidade:'Guarapuava', valor_site:'', valor_manutencao:'', prazo:'', portfolio:'kodaforge.com.br', parceiros_fechados:''}, s.cfg||{});
+  if(!EXT && s.cfg && !s.cfg.modoSiteApp){ s.cfg.modo='app'; s.cfg.modoSiteApp=true; }
+  s.cfg = Object.assign({modo:EXT?'web':'app', modoSiteApp:!EXT, meta:25, avancar:true, nome_vendedor:'Guilherme', cidade:'Guarapuava', valor_site:'', valor_manutencao:'', prazo:'', portfolio:'kodaforge.com.br', parceiros_fechados:''}, s.cfg||{});
   return s;
 }
 let saveWarned=false;
@@ -1103,11 +1104,12 @@ function registerSend(l,t,text,advance){
 async function send(l,t){
   const text=$('#msg').value.trim();
   if(!text){ toast('Mensagem vazia'); return; }
-  if(/\{\{|\[[A-ZÀ-Ú ]{3,}\]/.test(text) && !confirm('A mensagem ainda tem um campo para completar. Enviar assim mesmo?')) return;
-  if(sentToday()>=st.cfg.meta && !confirm(`Você já registrou ${sentToday()} envios hoje (limite: ${st.cfg.meta}). Muitos envios seguidos para desconhecidos podem fazer o WhatsApp bloquear seu número. Continuar?`)) return;
+  if(/\{\{|\[[A-ZÀ-Ú ]{3,}\]/.test(text)){ toast('A mensagem tem um campo entre colchetes ou chaves para completar. Ajuste o texto e clique em Enviar de novo.'); return; }
+  // o WhatsApp é aberto já neste clique: o Chrome só deixa abrir o app direto do clique, sem janelas no meio
   const r = await openWA(l,text);
   if(!handleWAResult(l,r)) return;
   registerSend(l,t,text,true);
+  if(sentToday()>st.cfg.meta) setTimeout(()=>toast(`Atenção: ${sentToday()} envios hoje (seu limite é ${st.cfg.meta}). Muitos envios para desconhecidos podem bloquear seu número.`),2600);
 }
 // trata o retorno de openWA; devolve false quando não deu para abrir a conversa
 function handleWAResult(l,r){
@@ -1340,7 +1342,7 @@ function renderCfg(){
       ${m==='app'?`<div class="warn" style="margin-bottom:10px">No modo Desktop, o painel lateral não consegue ler as conversas (isso só funciona no WhatsApp Web). Os envios continuam sendo registrados normalmente.</div>`:''}
       <div class="radio">
         <label><input type="radio" name="modo" value="web" ${m==='web'?'checked':''}> WhatsApp Web ${EXT||document.documentElement.dataset.kodaBridge?'(abre na aba já aberta, sem recarregar)':'(instale a extensão para não abrir abas novas)'}</label>
-        <label><input type="radio" name="modo" value="app" ${m==='app'?'checked':''}> WhatsApp Desktop (app do Windows)</label>
+        <label><input type="radio" name="modo" value="app" ${m==='app'?'checked':''}> WhatsApp Desktop (app do Windows)${EXT?'':' · recomendado'}</label>
         ${EXT?'':`<label><input type="radio" name="modo" value="wame" ${m==='wame'?'checked':''}> Link wa.me (celular)</label>`}
       </div>
       <div class="grid2" style="margin-top:14px">
